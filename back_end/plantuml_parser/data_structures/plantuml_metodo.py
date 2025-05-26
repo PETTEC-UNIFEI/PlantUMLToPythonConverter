@@ -11,23 +11,6 @@ class PlantUMLMetodo:
                  visibilidade: Optional[str] = None,
                  is_static: bool = False,
                  is_abstract: bool = False):
-        """
-        Inicializa uma nova instância de PlantUMLMetodo.
-
-        Args:
-            nome: O nome do método.
-            parametros: Uma lista de objetos PlantUMLParametro representando os parâmetros do método.
-                    Opcional, o padrão é uma lista vazia.
-            tipo_retorno: O tipo de dado retornado pelo método.
-                    Opcional, o padrão é None.
-            visibilidade: A visibilidade do método (ex: "+", "-").
-                    Opcional, o padrão é None.
-            is_static: True se o método for estático, False caso contrário.
-                    O padrão é False.
-            is_abstract: True se o método for abstrato, False caso contrário.
-                    O padrão é False.
-        """
-        
         self.nome: str = nome
         self.parametros: List[PlantUMLParametro] = parametros if parametros is not None else []
         self.tipo_retorno: Optional[str] = tipo_retorno

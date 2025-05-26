@@ -1,13 +1,5 @@
 """
-Módulo MainCodeGenerator (Orquestrador Principal do Gerador).
-
-Define a classe MainCodeGenerator, que orquestra todo o processo de
-geração de código Python a partir de um diagrama PlantUML parseado.
-Ele gerencia a criação de diretórios e arquivos de pacotes,
-e delega a geração do conteúdo específico de cada estrutura
-(classe, enum, interface) para os geradores apropriados no
-subpacote 'structure_generators'. Também utiliza o TypeMapper
-e o ImportManager para lidar com tipos e imports.
+Módulo MainCodeGenerator - Orquestrador Principal do Gerador.
 """
 from typing import List, Set, Optional, Union, Any, Tuple, Dict, Callable, TYPE_CHECKING
 import os
@@ -16,7 +8,6 @@ import re
 from back_end.plantuml_parser.data_structures import (
     PlantUMLDiagrama, PlantUMLClasse, PlantUMLEnum, PlantUMLInterface, PlantUMLPacote
 )
-# Imports dos novos módulos dentro de python_generator
 from .utils import sanitize_name_for_python_module, to_pascal_case
 from .type_mapper import TypeMapper
 from .import_manager import ImportManager
@@ -24,21 +15,9 @@ from .structure_generators import ClassGenerator, EnumGenerator, InterfaceGenera
 
 
 class MainCodeGenerator:
-    """
-    Orquestra a geração de arquivos de código Python a partir de um objeto ParsedDiagram,
-    delegando a geração de conteúdo específico para sub-geradores.
-    """
+    """Orquestra a geração de arquivos Python a partir de um diagrama PlantUML."""
     def __init__(self, parsed_diagram: PlantUMLDiagrama, output_base_dir: str):
-        """
-        Inicializa o MainCodeGenerator.
-
-        Args:
-            parsed_diagram: O objeto PlantUMLDiagrama contendo a estrutura
-                            parseada do diagrama PlantUML.
-            output_base_dir: O diretório raiz onde os arquivos Python gerados
-                             e a estrutura de pacotes serão criados.
-        """
-        # --- NOVO: cria subpasta numerada ---
+        # Cria subpasta numerada
         base_dir = output_base_dir
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
@@ -51,7 +30,7 @@ class MainCodeGenerator:
             novo_num = 1
         self.output_base_dir = os.path.join(base_dir, f"diagrama{novo_num:02d}")
         os.makedirs(self.output_base_dir, exist_ok=True)
-        # -------------------------------------
+        
         self.parsed_diagram: PlantUMLDiagrama = parsed_diagram
         self.generated_files_manifest: List[str] = []
         
@@ -63,10 +42,7 @@ class MainCodeGenerator:
 
 
     def _collect_all_structure_names(self) -> Set[str]:
-        """
-        Coleta recursivamente todos os nomes de estruturas definidas
-        (classes, enums, interfaces) no diagrama.
-        """
+        """Coleta recursivamente todos os nomes de estruturas definidas no diagrama."""
         names: Set[str] = set()
         def _collect_recursive(elements: List[Any]):
             for item in elements:
@@ -78,18 +54,14 @@ class MainCodeGenerator:
         return names
 
     def _map_structure_module_paths(self) -> dict[str, str]:
-        """
-        Mapeia o nome original de cada estrutura para seu caminho de módulo Python
-        (sanitizado e pontilhado), relativo à raiz do output_base_dir.
-        Ex: 'PacotePrincipal.SubPacote.nome_da_classe_sanitizado'.
-        """
+        """Mapeia o nome original de cada estrutura para seu caminho de módulo Python."""
         paths: dict[str, str] = {}
-        def _map_recursive(elements: List[Any], current_path_parts: List[str]): # current_path_parts são nomes de pacotes sanitizados
+        def _map_recursive(elements: List[Any], current_path_parts: List[str]):
             for item in elements:
                 sanitized_item_module_name = sanitize_name_for_python_module(item.nome)
                 if isinstance(item, (PlantUMLClasse, PlantUMLEnum, PlantUMLInterface)):
                     module_dot_path = ".".join(current_path_parts + [sanitized_item_module_name])
-                    paths[item.nome] = module_dot_path # Chave é o nome original PlantUML
+                    paths[item.nome] = module_dot_path
                 elif isinstance(item, PlantUMLPacote):
                     _map_recursive(item.elementos, current_path_parts + [sanitized_item_module_name])
         _map_recursive(self.parsed_diagram.elementos, [])
@@ -99,18 +71,7 @@ class MainCodeGenerator:
                                      structure: Union[PlantUMLClasse, PlantUMLEnum, PlantUMLInterface], 
                                      current_disk_path: str, 
                                      package_dot_path_parts: List[str]):
-        """
-        Gera um arquivo .py para uma única estrutura (classe, enum ou interface).
-
-        Este método coordena a coleta de imports, a geração da declaração da
-        estrutura e a geração do corpo da estrutura usando geradores específicos.
-
-        Args:
-            structure: O objeto da estrutura (PlantUMLClasse, PlantUMLEnum, ou PlantUMLInterface).
-            current_disk_path: O caminho no disco onde o arquivo será salvo (diretório do pacote).
-            package_dot_path_parts: Lista de nomes de pacotes (sanitizados) que formam o caminho
-                                     pontilhado até o diretório do módulo atual.
-        """
+        """Gera um arquivo .py para uma única estrutura."""
         file_content_lines: List[str] = []
         
         python_class_name = to_pascal_case(structure.nome)
@@ -121,7 +82,7 @@ class MainCodeGenerator:
         import_lines = self.import_manager.collect_imports_for_structure(
             structure, self.type_mapper, current_file_module_dot_path
         )
-        file_content_lines.extend(import_lines) # Adiciona as linhas de import (já formatadas)
+        file_content_lines.extend(import_lines)
 
         # 2. Gerar Declaração da Estrutura
         parent_classes_py_hints_for_class_def: List[str] = []
@@ -147,12 +108,12 @@ class MainCodeGenerator:
         elif isinstance(structure, PlantUMLInterface):
             if "ABC" not in parent_classes_py_hints_for_class_def: parent_classes_py_hints_for_class_def.append("ABC")
         elif isinstance(structure, PlantUMLEnum):
-            parent_classes_py_hints_for_class_def = ["Enum"] # Sobrescreve, Enum só herda de Enum
+            parent_classes_py_hints_for_class_def = ["Enum"]
 
         parent_str = f"({', '.join(parent_classes_py_hints_for_class_def)})" if parent_classes_py_hints_for_class_def else ""
         file_content_lines.append(f"class {python_class_name}{parent_str}:")
         
-        # 3. Gerar Docstring da Classe (VOCÊ ADICIONARÁ A SUA AQUI)
+        # 3. Gerar Docstring da Classe
         file_content_lines.append(f'    """Representa a estrutura {structure.nome} do PlantUML."""')
         file_content_lines.append("") 
 
@@ -167,15 +128,6 @@ class MainCodeGenerator:
         elif isinstance(structure, PlantUMLClasse):
             class_gen = ClassGenerator(structure, self.type_mapper, current_file_module_dot_path)
             body_lines.extend(class_gen.generate_code_lines())
-        
-        if not body_lines : # Adicionar pass se o corpo (gerado pelos sub-geradores) estiver vazio
-             # Mas EnumGenerator já adiciona pass se não tiver valores, e Class/Interface também.
-             # Esta verificação pode ser redundante se os sub-geradores já garantem um 'pass'.
-             # Vamos confiar que os sub-geradores colocam 'pass' se necessário.
-             if isinstance(structure, PlantUMLEnum) and not structure.valores_enum and not any(attr.is_static for attr in structure.atributos):
-                pass # EnumGenerator já deve ter adicionado pass
-             elif isinstance(structure, (PlantUMLInterface, PlantUMLClasse)) and not structure.atributos and not structure.metodos:
-                pass # Class/InterfaceGenerator já deve ter adicionado pass
         
         file_content_lines.extend(body_lines)
         file_content_lines.append("") 
@@ -195,10 +147,7 @@ class MainCodeGenerator:
         self.generated_files_manifest.append(os.path.relpath(file_path, self.output_base_dir))
 
     def _create_package_init(self, package_disk_path: str, structure_names_in_package: Optional[List[str]] = None, sub_package_names: Optional[List[str]] = None):
-        """
-        Cria um arquivo __init__.py para um pacote, opcionalmente importando
-        suas estruturas e subpacotes e definindo __all__.
-        """
+        """Cria um arquivo __init__.py para um pacote."""
         init_file_path = os.path.join(package_disk_path, "__init__.py")
         init_content: List[str] = ["# Pacote gerado automaticamente"]
         
@@ -212,7 +161,7 @@ class MainCodeGenerator:
                 structure_exports.append(python_class_name)
         
         sub_package_exports = []
-        if sub_package_names: # Nomes já são sanitizados (nomes de diretório)
+        if sub_package_names:
             init_content.append("\n# Importando sub-pacotes")
             for sanitized_pkg_name in sorted(sub_package_names):
                 init_content.append(f"from . import {sanitized_pkg_name}")
@@ -230,13 +179,9 @@ class MainCodeGenerator:
         self.generated_files_manifest.append(os.path.relpath(init_file_path, self.output_base_dir))
 
     def generate_files(self) -> List[str]:
-        """
-        Orquestra a geração de todos os arquivos Python e __init__.py
-        baseado no diagrama PlantUML parseado.
-        """
+        """Gera todos os arquivos Python com base no diagrama."""
         os.makedirs(self.output_base_dir, exist_ok=True)
         self.generated_files_manifest = []
-        # Mapeia 'caminho.do.pacote' para {'structures': [nomes_originais], 'sub_packages': [nomes_sanitizados]}
         package_content_map: Dict[str, Dict[str, List[str]]] = {"root": {"structures": [], "sub_packages": []}}
 
         def _organize_for_inits(elements: List[Any], current_package_key_parts: List[str]):
@@ -259,7 +204,7 @@ class MainCodeGenerator:
             current_package_key = ".".join(current_package_dot_path_parts) if current_package_dot_path_parts else "root"
             
             structure_names_for_init = package_content_map.get(current_package_key, {}).get("structures", [])
-            sub_package_names_for_init = package_content_map.get(current_package_key, {}).get("sub_packages", []) # Nomes já sanitizados
+            sub_package_names_for_init = package_content_map.get(current_package_key, {}).get("sub_packages", [])
             
             self._create_package_init(current_disk_path, structure_names_for_init, sub_package_names_for_init)
 

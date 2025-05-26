@@ -1,29 +1,13 @@
 """
 Classe para mapear tipos do PlantUML para type hints do Python.
-
-Também identifica quais imports são necessários para cada tipo.
 """
 from typing import Optional, Tuple, Set, List, Any as TypingAny # Renomeado para evitar conflito
 import re
 from .utils import to_pascal_case
 
 class TypeMapper:
-    """
-    Responsável por converter tipos PlantUML em type hints Python e
-    informar quais imports são necessários para cada caso.
-    """
+    """Converte tipos PlantUML em type hints Python e gerencia imports necessários."""
     def __init__(self, all_defined_structure_names: Set[str], structure_module_paths: dict[str, str]):
-        """
-        Inicializa uma nova instância do TypeMapper.
-
-        Args:
-            all_defined_structure_names: Um conjunto com todos os nomes originais
-                                         de estruturas (classes, enums, interfaces)
-                                         definidas no diagrama PlantUML.
-            structure_module_paths: Um dicionário mapeando nomes originais de estruturas
-                                    para seus caminhos de módulo Python (sanitizados e
-                                    pontilhados).
-        """
         self.all_defined_structure_names: Set[str] = all_defined_structure_names
         self.structure_module_paths: dict[str, str] = structure_module_paths
         self.type_mapping: dict[str, str] = {
@@ -34,16 +18,7 @@ class TypeMapper:
 
     def get_python_type_hint_and_imports(self, plantuml_type: str, current_file_module_dot_path: str, for_heritage_list: bool = False):
         """
-        Recebe um tipo PlantUML e retorna o type hint Python correspondente,
-        além dos imports padrão e do módulo typing necessários.
-
-        Args:
-            plantuml_type: Tipo conforme definido no PlantUML.
-            current_file_module_dot_path: Caminho do módulo Python atual.
-            for_heritage_list: Se True, retorna o nome direto para herança.
-
-        Returns:
-            Tuple com o type hint, imports padrão e imports do typing.
+        Converte um tipo PlantUML para type hint Python e retorna os imports necessários.
         """
         standard_imports: Set[str] = set()
         typing_imports: Set[str] = set() 
@@ -96,7 +71,6 @@ class TypeMapper:
             py_type = self.type_mapping[plantuml_type]
             if py_type == "datetime.date":
                 standard_imports.add("import datetime")
-            # Não adicionar "Date" ao typing_imports nunca
             return py_type, standard_imports, typing_imports
 
         if plantuml_type in self.typing_module_primitives:

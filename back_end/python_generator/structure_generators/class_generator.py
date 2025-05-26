@@ -2,44 +2,24 @@
 Geração do corpo de classes Python a partir de estruturas PlantUMLClasse.
 """
 from typing import List, Set, TYPE_CHECKING
-from ..utils import sanitize_name_for_python_module, to_pascal_case # Usando .. para subir um nível
+from ..utils import sanitize_name_for_python_module, to_pascal_case
 
 if TYPE_CHECKING:
-    # Importa estruturas de data_structures para type hinting
     from back_end.plantuml_parser.data_structures import PlantUMLClasse, PlantUMLAtributo, PlantUMLMetodo
-    # Importa TypeMapper para type hinting
     from ..type_mapper import TypeMapper
 
 class ClassGenerator:
-    """
-    Gera o corpo de uma classe Python, incluindo atributos, construtor e métodos.
-    """
+    """Gera o corpo de uma classe Python, incluindo atributos, construtor e métodos."""
     def __init__(self, 
                  class_structure: "PlantUMLClasse", 
                  type_mapper: "TypeMapper", 
                  current_file_module_dot_path: str):
-        """
-        Inicializa uma nova instância do ClassGenerator.
-
-        Args:
-            class_structure: O objeto PlantUMLClasse parseado.
-            type_mapper: Uma instância de TypeMapper para converter tipos PlantUML
-                         para type hints Python.
-            current_file_module_dot_path: O caminho pontilhado do módulo Python
-                                          que está sendo gerado.
-        """
         self.classe: "PlantUMLClasse" = class_structure
         self.type_mapper: "TypeMapper" = type_mapper
         self.current_file_module_dot_path: str = current_file_module_dot_path
 
     def _generate_static_attribute_lines(self) -> List[str]:
-        """
-        Gera as linhas de código para os atributos estáticos (de classe).
-
-        Returns:
-            Uma lista de strings, cada uma representando uma linha de código
-            para a declaração de um atributo estático.
-        """
+        """Gera as linhas de código para os atributos estáticos (de classe)."""
         lines: List[str] = []
         indent_level = 1 # Dentro da classe
         def add_s_line(text: str): lines.append("    " * indent_level + text)
@@ -53,7 +33,7 @@ class ClassGenerator:
                 attr_name_py = sanitize_name_for_python_module(attr.nome).upper()
                 default_val_str = ""
                 if attr.default_value is not None:
-                    default_val_str = f" = {attr.default_value}" # Assume que o valor default é uma string Python válida
+                    default_val_str = f" = {attr.default_value}"
                 elif py_type_hint != "Any" and py_type_hint != "None":
                     default_val_str = f": {py_type_hint} = None"
                 elif py_type_hint == "Any":
@@ -65,19 +45,11 @@ class ClassGenerator:
         return lines
 
     def _generate_init_lines(self) -> List[str]:
-        """
-        Gera as linhas de código para o método __init__ da classe,
-        incluindo parâmetros para atributos de instância e a chamada super().
-
-        Returns:
-            Uma lista de strings, cada uma representando uma linha de código
-            para o método __init__.
-        """
+        """Gera as linhas de código para o método __init__ da classe."""
         lines: List[str] = []
         base_indent_level = 1
         body_indent_level = 2
 
-        # Detecta parâmetros obrigatórios da superclasse
         parent_required_params = []
         parent_required_args = []
         if self.classe.classe_pai == "Pessoa do Sistema":
@@ -88,12 +60,10 @@ class ClassGenerator:
         if not instance_attributes and not self.classe.classe_pai:
             return []
 
-        # Separe obrigatórios e opcionais
         required_params = []
         optional_params = []
         init_body_lines: List[str] = []
 
-        # Chama super().__init__ com os argumentos adequados
         if self.classe.classe_pai:
             if parent_required_args:
                 init_body_lines.append(f"super().__init__({', '.join(parent_required_args)})")
@@ -102,7 +72,6 @@ class ClassGenerator:
 
         for attr in instance_attributes:
             param_name_py = sanitize_name_for_python_module(attr.nome)
-            # Não adicione parâmetros duplicados que já estão nos parent_required_args
             if param_name_py in parent_required_args:
                 continue
                 
@@ -134,7 +103,6 @@ class ClassGenerator:
 
             init_body_lines.append(f"self.{attr_name_in_class}: {self._get_type_hint_str(py_type_hint)} = {param_name_py}")
 
-        # Parâmetros obrigatórios primeiro, depois opcionais
         init_params_list = ["self"] + parent_required_params + required_params + optional_params
 
         lines.append("    " * base_indent_level + f"def __init__({', '.join(init_params_list)}):")
@@ -148,18 +116,10 @@ class ClassGenerator:
         return lines
 
     def _generate_method_lines(self, met: "PlantUMLMetodo") -> List[str]:
-        """
-        Gera as linhas de código para um método da classe.
-
-        Args:
-            met: Método a ser gerado.
-
-        Returns:
-            Lista de linhas de código para o método.
-        """
+        """Gera as linhas de código para um método da classe."""
         method_lines: List[str] = []
-        base_indent_level = 1 # Indentação para 'def nome(...):'
-        body_indent_level = 2 # Indentação para o corpo do método
+        base_indent_level = 1
+        body_indent_level = 2
         
         method_decorators = []
         if met.is_static: method_decorators.append("@staticmethod")
@@ -188,18 +148,13 @@ class ClassGenerator:
         elif met.visibilidade == "#": method_name_py = f"_{method_name_py}"
 
         method_lines.append("    " * base_indent_level + f"def {method_name_py}({', '.join(param_list_for_def)}){return_annotation}:")
-        method_lines.append("    " * body_indent_level + f'"""Método {met.nome}."""') # Sua docstring aqui
+        method_lines.append("    " * body_indent_level + f'"""Método {met.nome}."""')
         method_lines.append("    " * body_indent_level + "pass")
-        method_lines.append("    " * base_indent_level + "") # Linha em branco após o método
+        method_lines.append("    " * base_indent_level + "")
         return method_lines
 
     def _get_type_hint_str(self, type_hint: str) -> str:
-        """
-        Retorna o type hint correto para uso no código Python.
-        Corrige casos de Optional[List[Classe]] para Optional['List[Classe]'].
-        Corrige casos de List[Classe] para 'List[Classe]'.
-        Corrige casos de tipos forward reference para sempre usar aspas simples apenas onde necessário.
-        """
+        """Retorna o type hint formatado para uso no código."""
         if not type_hint:
             return "Any"
         type_hint = type_hint.replace("'", "").replace('"', "").strip()
@@ -235,13 +190,7 @@ class ClassGenerator:
         return type_hint
 
     def generate_code_lines(self) -> List[str]:
-        """
-        Gera as linhas de código para o corpo completo da classe,
-        incluindo atributos estáticos, construtor e métodos.
-
-        Retorna:
-            Uma lista de strings representando o corpo da classe.
-        """
+        """Gera as linhas de código para o corpo completo da classe."""
         lines: List[str] = []
         
         lines.extend(self._generate_static_attribute_lines())
@@ -250,13 +199,11 @@ class ClassGenerator:
         for met in self.classe.metodos:
             lines.extend(self._generate_method_lines(met))
             
-        # Adicionar um 'pass' se a classe estiver completamente vazia após todas as gerações
-        # (sem atributos estáticos, sem __init__ gerado, sem métodos)
         instance_attributes = [attr for attr in self.classe.atributos if not attr.is_static]
         if not self.classe.atributos and not self.classe.metodos and not \
-           (instance_attributes or self.classe.classe_pai) : # Se __init__ não foi gerado
-            lines.append("    pass") # Adiciona 'pass' com indentação de classe
-        elif not lines: # Se por algum motivo a lista de linhas ainda estiver vazia.
+           (instance_attributes or self.classe.classe_pai):
+            lines.append("    pass")
+        elif not lines:
             lines.append("    pass")
 
         return lines

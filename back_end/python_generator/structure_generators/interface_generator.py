@@ -3,50 +3,25 @@ Geração do corpo de interfaces Python a partir de estruturas PlantUMLInterface
 """
 from typing import List, TYPE_CHECKING
 
-# Importa funções de sanitização do diretório utils um nível acima
 from ..utils import sanitize_name_for_python_module, to_pascal_case 
 
 if TYPE_CHECKING:
-    # Importa estruturas de data_structures para type hinting
     from back_end.plantuml_parser.data_structures import PlantUMLInterface, PlantUMLMetodo, PlantUMLAtributo
-    # Importa TypeMapper para type hinting
     from ..type_mapper import TypeMapper
 
 class InterfaceGenerator:
-    """
-    Gera o corpo de uma interface Python, incluindo métodos abstratos e atributos estáticos.
-    """
+    """Gera o corpo de uma interface Python, incluindo métodos abstratos e atributos estáticos."""
     def __init__(self, 
                  interface_structure: "PlantUMLInterface", 
                  type_mapper: "TypeMapper", 
                  current_file_module_dot_path: str):
-        """
-        Inicializa uma nova instância do InterfaceGenerator.
-
-        Args:
-            interface_structure: O objeto PlantUMLInterface parseado.
-            type_mapper: Uma instância de TypeMapper para converter tipos PlantUML
-                         para type hints Python.
-            current_file_module_dot_path: O caminho pontilhado do módulo Python
-                                          que está sendo gerado.
-        """
         self.interface: "PlantUMLInterface" = interface_structure
         self.type_mapper: "TypeMapper" = type_mapper
         self.current_file_module_dot_path: str = current_file_module_dot_path
 
     def _generate_method_lines(self, met: "PlantUMLMetodo") -> List[str]:
-        """
-        Gera as linhas de código para um método da interface.
-
-        Args:
-            met: Método a ser gerado.
-
-        Returns:
-            Lista de linhas de código para o método.
-        """
+        """Gera as linhas de código para um método da interface."""
         method_lines: List[str] = []
-        # A indentação aqui é relativa ao início da definição do método,
-        # não ao início da classe. O MainCodeGenerator cuida da indentação da classe.
         
         method_decorators = []
         if not met.is_static: # Métodos de interface não estáticos são abstratos
@@ -74,22 +49,15 @@ class InterfaceGenerator:
         return_annotation = f" -> {return_type_py}" if return_type_py != "None" else ""
 
         method_name_py = sanitize_name_for_python_module(met.nome)
-        # Visibilidade em interfaces é sempre pública em Python, não aplicamos _ ou __
 
         method_lines.append("    " * 1 + f"def {method_name_py}({', '.join(param_list_for_def)}){return_annotation}:")
-        method_lines.append("    " * 2 + f'"""Método {met.nome} da interface."""') # Sua docstring aqui
+        method_lines.append("    " * 2 + f'"""Método {met.nome} da interface."""')
         method_lines.append("    " * 2 + "pass")
         method_lines.append("    " * 1 + "") # Linha em branco após o método
         return method_lines
 
     def generate_code_lines(self) -> List[str]:
-        """
-        Gera as linhas de código para o corpo completo da interface,
-        incluindo atributos estáticos (constantes) e métodos.
-
-        Retorna:
-            Uma lista de strings representando o corpo da interface.
-        """
+        """Gera as linhas de código para o corpo da interface."""
         lines: List[str] = []
         indent_level = 1 # Dentro da classe
 
@@ -107,7 +75,6 @@ class InterfaceGenerator:
                 if attr.default_value is not None:
                     default_val_str = f" = {attr.default_value}"
                 elif py_type_hint != "Any" and py_type_hint != "None":
-                    # Interfaces geralmente não inicializam, apenas declaram tipo para constantes
                     default_val_str = f": {py_type_hint} = ..." 
                 elif py_type_hint == "Any":
                      default_val_str = f": {py_type_hint} = ..."
