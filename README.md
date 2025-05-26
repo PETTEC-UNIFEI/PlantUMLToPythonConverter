@@ -1,8 +1,3 @@
-Claro, posso gerar um arquivo README.md para o seu projeto `PlantUMLToPythonConverter`.
-
-Aqui está o conteúdo do `README.md`:
-
-```markdown
 # PlantUML to Python Converter
 
 Este projeto é uma ferramenta de linha de comando (CLI) projetada para converter diagramas de classe PlantUML em código Python estruturado. Ele analisa a sintaxe do PlantUML para classes, enums, interfaces, atributos, métodos e relacionamentos, e então gera os arquivos `.py` correspondentes, organizados em pacotes conforme definido no diagrama.
