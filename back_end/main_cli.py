@@ -2,57 +2,113 @@
 CLI para rodar o backend do conversor PlantUML para Python.
 
 Uso:
-    python3 -m back_end.main_cli --input caminho/arquivo.puml --output pasta_saida
+    python back_end/main_cli.py [--input caminho/arquivo.puml] [--output pasta_saida]
+    
+    Se não for especificado um arquivo de entrada, será usado o exemplo_diagrama.plantuml
+    da pasta diagramas.
 """
 
 import argparse
 import os
-# Ajuste nos imports para refletir a estrutura de pacotes
-from .plantuml_parser.parser import PlantUMLParser 
-from .python_generator.main_generator import MainCodeGenerator
+import sys
+import traceback
+
+# Verificar se o script está sendo executado do diretório correto
+current_dir = os.getcwd()
+expected_dir = '/home/lucas/Documentos/PlantUMLToPythonConverter/PlantUMLToPythonConverter'
+if os.path.basename(current_dir) == 'PlantUMLToPythonConverter' and not current_dir.endswith('PlantUMLToPythonConverter/PlantUMLToPythonConverter'):
+    print("\nAVISO: Você parece estar no diretório incorreto.")
+    print(f"Diretório atual: {current_dir}")
+    print("Execute o script como:")
+    print("  python back_end/main_cli.py")
+    print("Ou navegue para o diretório correto:")
+    print("  cd /home/lucas/Documentos/PlantUMLToPythonConverter/PlantUMLToPythonConverter")
+    print("  python back_end/main_cli.py")
+    sys.exit(1)
+
+# Verificar se o ply está instalado
+try:
+    import ply
+except ImportError:
+    print("Erro: biblioteca 'ply' não instalada. Execute 'pip install ply'")
+    sys.exit(1)
+
+# Adiciona o diretório raiz do projeto ao path do Python
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, '..'))
+sys.path.insert(0, project_root)
+
+# Importa os módulos necessários
+try:
+    from back_end.plantuml_parser.parser import PlantUMLParser
+    from back_end.python_generator.main_generator import MainCodeGenerator
+except ImportError as e:
+    print(f"Erro ao importar módulos: {e}")
+    print("Execute: python back_end/main_cli.py")
+    sys.exit(1)
 
 def main():
-    parser = argparse.ArgumentParser(description="Conversor PlantUML para Python (backend CLI)")
-    parser.add_argument('--input', '-i', required=True, help='Arquivo PlantUML de entrada (.plantuml)')
-    parser.add_argument('--output', '-o', default='output_generated_code', help='Diretório de saída para os arquivos Python gerados')
+    # Parser de argumentos com mensagens de ajuda
+    parser = argparse.ArgumentParser(
+        description="Conversor PlantUML para Python",
+        epilog="Se não for especificado um arquivo de entrada, será usado o exemplo_diagrama.plantuml"
+    )
+    parser.add_argument('--input', '-i', help='Arquivo PlantUML de entrada')
+    parser.add_argument('--output', '-o', default='output_generated_code', help='Diretório de saída')
     args = parser.parse_args()
+    
+    # Se não for especificado um arquivo de entrada, usa o exemplo
+    if not args.input:
+        # Tenta encontrar o arquivo de exemplo em diferentes locais
+        possible_paths = [
+            os.path.join(project_root, 'diagramas', 'exemplo_diagrama.plantuml'),
+            os.path.join(project_root, 'diagramas', 'exemplo_diagrama.puml'),
+        ]
+        
+        for path in possible_paths:
+            if os.path.isfile(path):
+                args.input = path
+                print(f"Usando exemplo: {path}")
+                break
+        
+        if not args.input:
+            print("Erro: Especifique um arquivo de entrada com --input")
+            sys.exit(1)
 
+    # Verificação do arquivo de entrada
     if not os.path.isfile(args.input):
-        print(f"Arquivo de entrada não encontrado: {args.input}")
-        exit(1)
+        print(f"Erro: Arquivo não encontrado: {args.input}")
+        sys.exit(1)
 
+    # Leitura do arquivo
     try:
         with open(args.input, 'r', encoding='utf-8') as f:
             plantuml_code = f.read()
-    except Exception as e:
-        print(f"Erro ao ler o arquivo de entrada '{args.input}': {e}")
-        exit(1)
-
-    print(f"--- Iniciando conversão do arquivo '{args.input}' ---")
-    
-    try:
+            
+        print(f"Convertendo {args.input}...")
+        # Processamento do diagrama
         parser_backend = PlantUMLParser()
         diagrama = parser_backend.parse(plantuml_code)
-        print(f"--- Parsing concluído ---")
-        # print(diagrama) # Para depurar o diagrama parseado
-
+        
         generator = MainCodeGenerator(diagrama, args.output)
         arquivos_gerados = generator.generate_files()
-        print(f"--- Geração de código concluída ---")
-
+        
         if arquivos_gerados:
-            print(f"\nArquivos Python gerados em '{os.path.abspath(args.output)}':")
+            print(f"Arquivos gerados em '{os.path.abspath(args.output)}':")
             for arq in sorted(arquivos_gerados):
                 print(f"  - {arq}")
         else:
-            print("Nenhum arquivo Python foi gerado.")
+            print("Nenhum arquivo foi gerado.")
 
     except SyntaxError as e:
-        print(f"\nERRO DE SINTAXE no PARSER: {e}")
+        print(f"Erro de sintaxe: {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"\nERRO INESPERADO DURANTE A CONVERSÃO: {e}")
+        print(f"Erro: {e}")
+        traceback.print_exc()
+        sys.exit(1)
 
-    print("\n--- Conversão concluída ---")
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -1,1 +1,23 @@
+# Arquivos Python compilados
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Diretórios de saída do conversor
+output_generated_code/
+**/output_generated_code/
+
+# Ambiente virtual
 .venv/
+venv/
+ENV/
+
+# Arquivos de IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Arquivos de log
+*.log
