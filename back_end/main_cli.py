@@ -33,26 +33,24 @@ def main():
     try:
         parser_backend = PlantUMLParser()
         diagrama = parser_backend.parse(plantuml_code)
-        print(f"--- Parsing concluído ---") # Adicionado para feedback
-        # print(diagrama) # Descomente para depurar o diagrama parseado
+        print(f"--- Parsing concluído ---")
+        # print(diagrama) # Para depurar o diagrama parseado
 
         generator = MainCodeGenerator(diagrama, args.output)
         arquivos_gerados = generator.generate_files()
-        print(f"--- Geração de código concluída ---") # Adicionado para feedback
-
+        print(f"--- Geração de código concluída ---")
 
         if arquivos_gerados:
             print(f"\nArquivos Python gerados em '{os.path.abspath(args.output)}':")
-            for arq in sorted(arquivos_gerados): # Ordenado para consistência
+            for arq in sorted(arquivos_gerados):
                 print(f"  - {arq}")
         else:
             print("Nenhum arquivo Python foi gerado.")
 
-    except SyntaxError as e: # Captura erros de parsing do PlantUMLParser
+    except SyntaxError as e:
         print(f"\nERRO DE SINTAXE no PARSER: {e}")
-    except Exception as e: # Captura outros erros
+    except Exception as e:
         print(f"\nERRO INESPERADO DURANTE A CONVERSÃO: {e}")
-
 
     print("\n--- Conversão concluída ---")
 
