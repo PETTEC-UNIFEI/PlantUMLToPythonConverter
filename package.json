@@ -1,0 +1,26 @@
+{
+  "name": "plantumltopythonconverter",
+  "version": "1.0.0",
+  "description": "Este projeto é uma ferramenta de linha de comando (CLI) projetada para converter diagramas de classe PlantUML em código Python estruturado. Ele analisa a sintaxe do PlantUML para classes, enums, interfaces, atributos, métodos e relacionamentos, e então gera os arquivos `.py` correspondentes, organizados em pacotes conforme definido no diagrama.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PETTEC-UNIFEI/PlantUMLToPythonConverter.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/PETTEC-UNIFEI/PlantUMLToPythonConverter/issues"
+  },
+  "homepage": "https://github.com/PETTEC-UNIFEI/PlantUMLToPythonConverter#readme",
+  "devDependencies": {
+    "tailwindcss": "^4.1.11"
+  }
+}

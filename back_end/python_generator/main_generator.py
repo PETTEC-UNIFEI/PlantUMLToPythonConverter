@@ -16,19 +16,23 @@ from .structure_generators import ClassGenerator, EnumGenerator, InterfaceGenera
 
 class MainCodeGenerator:
     """Orquestra a geração de arquivos Python a partir de um diagrama PlantUML."""
-    def __init__(self, parsed_diagram: PlantUMLDiagrama, output_base_dir: str):
+    def __init__(self, parsed_diagram: PlantUMLDiagrama, output_base_dir: str, diagram_name: str = None):
         # Cria subpasta numerada
         base_dir = output_base_dir
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
-        # Busca o maior número já usado
-        existentes = [d for d in os.listdir(base_dir) if re.match(r"diagrama\d+$", d)]
-        if existentes:
-            maior = max([int(re.findall(r"\d+", nome)[0]) for nome in existentes])
-            novo_num = maior + 1
+        # Usa o nome do diagrama se fornecido, senão padrão "Diagrama"
+        if diagram_name:
+            base_name = sanitize_name_for_python_module(diagram_name)
         else:
-            novo_num = 1
-        self.output_base_dir = os.path.join(base_dir, f"diagrama{novo_num:02d}")
+            base_name = "Diagrama"
+        # Garante unicidade: se já existe, incrementa _2, _3, ...
+        nome_final = base_name
+        i = 1
+        while os.path.exists(os.path.join(base_dir, nome_final)):
+            i += 1
+            nome_final = f"{base_name}_{i}"
+        self.output_base_dir = os.path.join(base_dir, nome_final)
         os.makedirs(self.output_base_dir, exist_ok=True)
         
         self.parsed_diagram: PlantUMLDiagrama = parsed_diagram

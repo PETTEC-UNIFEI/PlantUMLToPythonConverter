@@ -1,0 +1,161 @@
+@startuml TesteDiagrama
+
+!theme vibrant
+
+package "Gestão de Pessoas" {
+    abstract class "Pessoa do Sistema" {
+        # nome: String
+        # id: String
+        + {abstract} obterTipoPessoa(): String
+        + seApresentar(): String
+    }
+
+    interface "Autenticavel via SSO" {
+        {abstract} autenticarSSO(tokenSSO: String): boolean
+        + {static} CHAVE_SERVICO_SSO: String
+    }
+
+    class Professor extends "Pessoa do Sistema" implements "Autenticavel via SSO" {
+        - departamento: String
+        + disciplinas: List<Disciplina>
+        + Professor(nome: String, id: String, departamento: String)
+        + lecionar(disciplina: Disciplina): void
+        + obterTipoPessoa(): String
+        + autenticarSSO(tokenSSO: String): boolean
+    }
+
+    class Aluno extends "Pessoa do Sistema" {
+        - matricula: String
+        + curso: Curso
+        + historico: List<Nota>
+        + Aluno(nome: String, id: String, matricula: String, curso: Curso)
+        + obterTipoPessoa(): String
+        + solicitarDocumento(tipo: String): Documento
+    }
+
+    class "Técnico Administrativo" extends "Pessoa do Sistema" {
+        + setor: String
+        + registrarOcorrencia(): void
+    }
+}
+
+package "Estrutura Acadêmica" {
+    class Curso {
+        + nome: String
+        + codigoMEC: String
+        - coordenador: Professor
+        + disciplinasObrigatorias: List<Disciplina>
+        + disciplinasOptativas: List<Disciplina>
+    }
+
+    class Disciplina {
+        + nome: String
+        + codigoDisciplina: String
+        + creditos: int
+        + ementa: String
+        + preRequisitos: List<Disciplina>
+    }
+
+    interface "Avaliavel" {
+        + adicionarNota(aluno: Aluno, valor: float): void
+        + calcularMediaFinal(aluno: Aluno): float
+    }
+
+    class Turma implements "Avaliavel" {
+        + codigoTurma: String
+        - professorResponsavel: Professor
+        + alunosMatriculados: List<Aluno>
+        + horario: String
+        + sala: String
+        + disciplinaAssociada: Disciplina
+        + adicionarAluno(aluno: Aluno): void
+        + removerAluno(aluno: Aluno): void
+    }
+    
+    class Nota {
+        + valor: float
+        + peso: float
+        + aluno: Aluno
+        + avaliacao: Turma
+    }
+
+    enum "Tipo de Documento" {
+        ATESTADO_MATRICULA
+        HISTORICO_ESCOLAR
+        DECLARACAO_VINCULO
+    }
+
+    class Documento {
+        + tipo: "Tipo de Documento"
+        + dataEmissao: Date
+        + conteudo: String
+        - emitidoPor: "Técnico Administrativo"
+    }
+    
+    package "Serviços Auxiliares" {
+        class "Sistema de Notificação" {
+            + {static} enviarEmail(destinatario: String, assunto: String, mensagem: String): void
+            + {static} enviarSMS(numero: String, mensagem: String): void
+        }
+    }
+}
+
+' Classes movidas para o nível raiz para facilitar testes de relacionamento com diferentes escopos
+class AdminUser {
+  nivelAcesso: int
+}
+
+class CategoriaProduto {
+    nomeCategoria: String
+}
+
+class ItemPedido {
+    quantidade: int
+}
+
+class PagamentoServico {
+    processarPagamento()
+}
+
+interface RealizadorDeBackup {
+    fazerBackup(): boolean
+}
+
+class "Ordem de Compra" {
+  numeroPedido: String
+  dataCriacao: Date
+}
+
+
+' --- Relacionamentos entre os elementos ---
+"Pessoa do Sistema" <|-- AdminUser 
+Professor ..|> "Autenticavel via SSO" 
+
+Curso "1" -- "1" Professor : "coordenado por >" 
+Curso "1" o-- "0..*" Disciplina : "contem disciplinas >" 
+Disciplina "0..*" -- "0..*" Disciplina : "< tem como pre-requisito" 
+
+Turma "1" -- "1" Disciplina : "refere-se a >"
+Turma "1" -- "0..1" Professor : "ministrada por >"
+Turma "1" o-- "0..*" Aluno : "< matriculados"
+
+Aluno "1" -- "1" Curso : "< esta matriculado em"
+Aluno "1" *-- "0..*" Nota : "possui >" 
+
+Documento "1" -- "1" "Tipo de Documento" : "e do tipo >"
+Documento "1" -- "1" "Técnico Administrativo" : "< emitido por"
+
+Aluno ..> Documento : "solicita >" 
+Nota ..> Aluno
+Nota ..> Turma 
+
+"Sistema de Notificação" <.. Professor : "usa para notificar" 
+"Sistema de Notificação" <.. Aluno : "usa para notificar"
+
+"Ordem de Compra" "*" -- "1" Aluno : "realizada por" 
+Produto "1" o-- "0..*" CategoriaProduto 
+Pedido "*" *-- "1..*" ItemPedido : "contem" 
+PagamentoServico ..> Autenticavel : "usa" 
+Usuario ..|> RealizadorDeBackup 
+
+@enduml

@@ -1,15 +1,17 @@
-ESTRUTURA DO PROJETO PLANTUML PARA PYTHON CONVERTER
+ESTRUTURA DO PROJETO PLANTUML TO PYTHON CONVERTER
 ==================================================
 
-plantuml_to_python_converter/      # Pasta raiz do projeto
+PlantUMLToPythonConverter/           # Pasta raiz do projeto
 |
-|-- back_end/                      # Núcleo do conversor PlantUML para Python
+|-- app.py                          # Interface desktop (PyWebView)
+|-- back_end/                       # Núcleo do conversor PlantUML para Python
 |   |-- __init__.py
-|   |-- plantuml_parser/           # Parser e estruturas de dados do PlantUML
+|   |-- main_cli.py                 # Interface de linha de comando (CLI)
+|   |-- plantuml_parser/            # Parser e estruturas de dados do PlantUML
 |   |   |-- __init__.py
-|   |   |-- parser.py              # Implementação do parser que converte código PlantUML em objetos Python
-|   |   |-- lexer.py               # Analisador léxico que divide o código PlantUML em tokens
-|   |   |-- data_structures/       # Classes que representam elementos do diagrama
+|   |   |-- parser.py               # Parser sintático do PlantUML
+|   |   |-- lexer.py                # Analisador léxico do PlantUML
+|   |   |-- data_structures/        # Classes que representam elementos do diagrama
 |   |       |-- __init__.py
 |   |       |-- plantuml_diagrama.py       # Representa o diagrama inteiro
 |   |       |-- plantuml_estrutura_base.py # Classe base para elementos estruturais
@@ -22,69 +24,44 @@ plantuml_to_python_converter/      # Pasta raiz do projeto
 |   |       |-- plantuml_pacote.py         # Representa pacotes/namespaces
 |   |       |-- plantuml_parametro.py      # Representa parâmetros de métodos
 |   |
-|   |-- python_generator/          # Geração de código Python a partir das estruturas
+|   |-- python_generator/           # Geração de código Python
 |   |   |-- __init__.py
-|   |   |-- main_generator.py      # Orquestrador principal que coordena toda a geração de código
-|   |   |-- utils.py               # Funções utilitárias (ex: conversão de nomes, sanitização)
-|   |   |-- type_mapper.py         # Mapeia tipos PlantUML para hints de tipos Python
-|   |   |-- import_manager.py      # Gerencia imports e evita problemas de importação circular
-|   |   |-- structure_generators/  # Geradores específicos para diferentes tipos de estruturas
+|   |   |-- main_generator.py       # Orquestrador da geração de código
+|   |   |-- utils.py                # Funções utilitárias
+|   |   |-- type_mapper.py          # Mapeia tipos PlantUML para Python
+|   |   |-- import_manager.py       # Gerencia imports
+|   |   |-- structure_generators/   # Geradores para classes, enums, interfaces
 |   |       |-- __init__.py
-|   |       |-- class_generator.py    # Gera classes Python
-|   |       |-- enum_generator.py     # Gera enumerações Python
-|   |       |-- interface_generator.py # Gera interfaces abstractas Python
-|   |
-|   |-- main_cli.py                # Interface de linha de comando para execução do conversor
+|   |       |-- class_generator.py      # Gera classes Python
+|   |       |-- enum_generator.py       # Gera enumerações Python
+|   |       |-- interface_generator.py  # Gera interfaces abstratas Python
 |
-|-- diagramas/                     # Diagramas PlantUML de entrada
-|   |-- exemplo_diagrama.plantuml  # Diagrama de exemplo que ilustra a sintaxe suportada
+|-- converter.py                    # Script de conversão CLI
+|-- front_end/                      # Interface gráfica (HTML, CSS, JS)
+|   |-- interface.html              # Estrutura visual da interface
+|   |-- style.css                   # Estilos (Tailwind)
+|   |-- main.js                     # Lógica de integração frontend
 |
-|-- output_generated_code/         # Código Python gerado a partir do PlantUML
-|   |-- diagrama01/                # Resultado da primeira execução do conversor
-|   |   |-- __init__.py
-|   |   |-- (classes no nível raiz)
-|   |   |-- _diagram_relationships.txt # Relacionamentos do diagrama
-|   |   |-- gestao_de_pessoas/     # Subpacote de pessoas (se existir)
-|   |   |   |-- __init__.py
-|   |   |   |-- pessoa_do_sistema.py
-|   |   |   |-- professor.py
-|   |   |   |-- aluno.py
-|   |   |   |-- tecnico_administrativo.py
-|   |   |
-|   |   |-- estrutura_academica/   # Subpacote acadêmico (se existir)
-|   |       |-- __init__.py
-|   |       |-- curso.py
-|   |       |-- disciplina.py
-|   |       |-- turma.py
-|   |
-|   |-- diagrama02/                # Resultado da segunda execução
-|       |-- (estrutura similar)
+|-- data/                           # Dados de entrada e saída
+|   |-- diagramas/                  # Diagramas PlantUML de entrada
+|   |   |-- exemplo_diagrama.plantuml
+|   |   |-- ...                     # Outros diagramas
+|   |-- output_generated_code/      # Código Python gerado, um diretório por diagrama
+|       |-- <nome_do_diagrama>/     # Estrutura gerada para cada diagrama
+|           |-- __init__.py
+|           |-- <nome_do_diagrama>.plantuml
+|           |-- _diagram_relationships.txt
+|           |-- ...                 # Arquivos Python gerados
 |
-|-- explicacao_diretorio.txt       # Este arquivo (estrutura do projeto)
-|-- explicacao_diretorio.md        # Versão em Markdown com mais detalhes
-
-COMO EXECUTAR O PROJETO
-----------------------
-
-1. Converter um diagrama PlantUML para Python:
-   python3 -m back_end.main_cli --input diagramas/exemplo_diagrama.plantuml --output output_generated_code
-
-2. Executar um exemplo gerado:
-   cd output_generated_code
-   python3 -m diagramaXX.main
-   Onde XX é o número do diagrama gerado (ex: 01, 02, etc.)
-
-LIMITAÇÕES CONHECIDAS E SOLUÇÃO DE PROBLEMAS
-------------------------------------------
-
-1. Classes abstratas precisam de implementações concretas para serem instanciadas
-   Solução: Criar subclasses concretas que implementem os métodos abstratos, ou usar Mock objects para testes
-
-2. Importações circulares entre módulos
-   Solução: O gerador já implementa a estratégia TYPE_CHECKING para evitar este problema
-
-3. Super classes com parâmetros obrigatórios no construtor
-   Solução: Ao instanciar objetos, fornecer todos os parâmetros obrigatórios da superclasse
-   Exemplo: 
-   - Para classes que herdam de PessoaDoSistema, sempre use nome e id:
-     professor = Professor(nome="Nome", id="ID123", departamento="Dept")
+|-- requirements.txt                # Dependências Python
+|-- package.json                    # Dependências Node/Tailwind (dev)
+|-- .gitignore                      # Arquivos/pastas ignorados pelo git
+|-- README.md                       # Documentação principal
+|-- explicacao_diretorio.txt        # Este arquivo, explicando a estrutura
+|-- tests/                          # Estrutura para testes automatizados
+|   |-- back_end_tests/             # Testes do backend
+|   |-- front_end_tests/            # Testes do frontend
+|   |-- generator/                  # Testes do gerador
+|-- .venv/                          # Ambiente virtual Python (não versionado)
+|-- node_modules/                   # Dependências Node/Tailwind (não versionado)
+|-- __pycache__/                    # Arquivos compilados Python (não versionado)

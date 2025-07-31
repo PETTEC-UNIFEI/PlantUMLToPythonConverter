@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlantUML</title>
+    <!-- Tailwind CSS para estilização rápida e moderna -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter para uma aparência limpa -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- CSS customizado -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="bg-gray-900 text-gray-200 flex flex-col h-screen antialiased">
+
+    <!-- Cabeçalho -->
+    <header class="bg-gray-800/50 border-b border-gray-700 p-4 shadow-md">
+        <h1 class="text-xl font-bold text-center text-white">PlantUML</h1>
+        <p class="text-sm text-gray-400 text-center">Cole seu diagrama de classes PlantUML à esquerda e veja o código Python à direita.</p>
+    </header>
+
+    <!-- Conteúdo Principal (Painéis) -->
+    <main class="custom-layout">
+
+        <!-- Painel Esquerdo: Entrada PlantUML -->
+        <div class="painel">
+            <div class="painel-header">
+                <h2 class="font-semibold text-lg whitespace-nowrap">PlantUML</h2>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <button id="importBtn" class="btn btn-blue">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Importar
+                    </button>
+                    <button id="clearBtn" class="btn btn-red">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                        Limpar
+                    </button>
+                    <button id="historyBtn" class="btn btn-blue">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Histórico
+                    </button>
+                </div>
+            </div>
+            <div class="painel-body">
+                <textarea id="plantUmlInput" class="w-full h-full bg-transparent text-gray-300 font-mono text-sm resize-none focus:outline-none" placeholder="@startuml PlaceHolder&#10;class Car {&#10;  -brand: str&#10;  -model: str&#10;  +drive()&#10;}&#10;@enduml"></textarea>
+            </div>
+        </div>
+
+        <!-- Painel Direito: Saída Python -->
+        <div class="painel">
+            <div class="painel-header">
+                <h2 class="font-semibold text-lg whitespace-nowrap">Código Python</h2>
+                <button id="copyBtn" class="btn btn-blue flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 7.5V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.03 1.125 0 1.131.094 1.976 1.057 1.976 2.192V7.5m-9 3c0-1.135.845-2.098 1.976-2.192a48.424 48.424 0 011.125 0c1.131.094 1.976 1.057 1.976 2.192V18a2.25 2.25 0 002.25 2.25h3.375c1.24 0 2.25-1.01 2.25-2.25V10.5c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.125 0c-1.131.094-1.976-1.057-1.976-2.192V7.5" />
+                    </svg>
+                    Copiar
+                </button>
+            </div>
+            <div class="painel-body">
+                <pre class="w-full h-full overflow-auto"><code id="pythonOutput" class="language-python text-sm font-mono text-gray-300"># O código Python gerado aparecerá aqui...</code></pre>
+            </div>
+        </div>
+    </main>
+
+    <!-- Botão Central de Conversão -->
+    <footer class="p-4 flex justify-center">
+        <button id="convertBtn" class="btn btn-green w-full md:w-1/3 justify-center gap-3 text-lg font-bold shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+            Converter
+        </button>
+    </footer>
+
+    <!-- Lógica da Interface -->
+    <script src="main.js"></script>
+</body>
+
+</html>

@@ -1,23 +1,33 @@
-# Arquivos Python compilados
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
-
-# Diretórios de saída do conversor
-output_generated_code/
-**/output_generated_code/
+*.pyo
 
 # Ambiente virtual
 .venv/
 venv/
 ENV/
 
-# Arquivos de IDE
+# Node
+node_modules/
+
+# Saída do conversor
+output_generated_code/
+
+# IDEs
 .idea/
 .vscode/
-*.swp
-*.swo
 
-# Arquivos de log
+# Logs
 *.log
+npm-debug.log*
+
+# Variáveis de ambiente
+.env
+*.env
+
+# Arquivos temporários
+*.tmp
+*.bak
+*.orig

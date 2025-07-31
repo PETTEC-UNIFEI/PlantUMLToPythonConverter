@@ -55,6 +55,7 @@ def main():
     )
     parser.add_argument('--input', '-i', help='Arquivo PlantUML de entrada')
     parser.add_argument('--output', '-o', default='output_generated_code', help='Diretório de saída')
+    parser.add_argument('--diagram-name', default=None, help='Nome do diagrama para a pasta de saída')
     args = parser.parse_args()
     
     # Se não for especificado um arquivo de entrada, usa o exemplo
@@ -84,14 +85,15 @@ def main():
     try:
         with open(args.input, 'r', encoding='utf-8') as f:
             plantuml_code = f.read()
-            
         print(f"Convertendo {args.input}...")
         # Processamento do diagrama
         parser_backend = PlantUMLParser()
         diagrama = parser_backend.parse(plantuml_code)
-        
-        generator = MainCodeGenerator(diagrama, args.output)
+        # Usa o nome do diagrama se fornecido
+        generator = MainCodeGenerator(diagrama, args.output, diagram_name=args.diagram_name)
         arquivos_gerados = generator.generate_files()
+        # NOVO: imprime o caminho da pasta gerada para o app.py capturar
+        print(f"[PASTA_GERADA]: {os.path.relpath(generator.output_base_dir)}")
         
         if arquivos_gerados:
             print(f"Arquivos gerados em '{os.path.abspath(args.output)}':")
