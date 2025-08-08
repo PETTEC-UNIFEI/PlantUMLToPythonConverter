@@ -1,11 +1,13 @@
 """
-CLI para rodar o backend do conversor PlantUML para Python.
+CLI para rodar o backend do conversor PlantUML para Python e C#.
 
 Uso:
-    python back_end/main_cli.py [--input caminho/arquivo.puml] [--output pasta_saida]
+    python back_end/main_cli.py [--input caminho/arquivo.puml] [--output pasta_saida] [--language python|csharp]
     
     Se não for especificado um arquivo de entrada, será usado o exemplo_diagrama.plantuml
-    da pasta diagramas.
+    da pasta data/diagramas.
+    
+    Se não for especificada a linguagem, será gerado código Python por padrão.
 """
 
 import argparse
@@ -15,15 +17,14 @@ import traceback
 
 # Verificar se o script está sendo executado do diretório correto
 current_dir = os.getcwd()
-expected_dir = '/home/lucas/Documentos/PlantUMLToPythonConverter/PlantUMLToPythonConverter'
-if os.path.basename(current_dir) == 'PlantUMLToPythonConverter' and not current_dir.endswith('PlantUMLToPythonConverter/PlantUMLToPythonConverter'):
+# Verifica se estamos no diretório PlantUMLToPythonConverter
+if not (os.path.basename(current_dir) == 'PlantUMLToPythonConverter' or 
+        current_dir.endswith('PlantUMLToPythonConverter')):
     print("\nAVISO: Você parece estar no diretório incorreto.")
     print(f"Diretório atual: {current_dir}")
     print("Execute o script como:")
     print("  python back_end/main_cli.py")
-    print("Ou navegue para o diretório correto:")
-    print("  cd /home/lucas/Documentos/PlantUMLToPythonConverter/PlantUMLToPythonConverter")
-    print("  python back_end/main_cli.py")
+    print("Ou navegue para o diretório correto do projeto PlantUMLToPythonConverter")
     sys.exit(1)
 
 # Verificar se o ply está instalado
@@ -41,7 +42,8 @@ sys.path.insert(0, project_root)
 # Importa os módulos necessários
 try:
     from back_end.plantuml_parser.parser import PlantUMLParser
-    from back_end.python_generator.main_generator import MainCodeGenerator
+    from back_end.python_generator.main_generator import MainCodeGenerator as PythonGenerator
+    from back_end.csharp_generator.main_generator import MainCodeGenerator as CSharpGenerator
 except ImportError as e:
     print(f"Erro ao importar módulos: {e}")
     print("Execute: python back_end/main_cli.py")
@@ -50,18 +52,24 @@ except ImportError as e:
 def main():
     # Parser de argumentos com mensagens de ajuda
     parser = argparse.ArgumentParser(
-        description="Conversor PlantUML para Python",
+        description="Conversor PlantUML para Python e C#",
         epilog="Se não for especificado um arquivo de entrada, será usado o exemplo_diagrama.plantuml"
     )
     parser.add_argument('--input', '-i', help='Arquivo PlantUML de entrada')
     parser.add_argument('--output', '-o', default='output_generated_code', help='Diretório de saída')
     parser.add_argument('--diagram-name', default=None, help='Nome do diagrama para a pasta de saída')
+    parser.add_argument('--language', '-l', choices=['python', 'csharp'], default='python', 
+                       help='Linguagem de destino (python ou csharp). Padrão: python')
+    parser.add_argument('--namespace', '-n', default='GeneratedCode', 
+                       help='Namespace base para C# (ignorado para Python). Padrão: GeneratedCode')
     args = parser.parse_args()
     
     # Se não for especificado um arquivo de entrada, usa o exemplo
     if not args.input:
         # Tenta encontrar o arquivo de exemplo em diferentes locais
         possible_paths = [
+            os.path.join(project_root, 'data', 'diagramas', 'exemplo_diagrama.plantuml'),
+            os.path.join(project_root, 'data', 'diagramas', 'exemplo_diagrama.puml'),
             os.path.join(project_root, 'diagramas', 'exemplo_diagrama.plantuml'),
             os.path.join(project_root, 'diagramas', 'exemplo_diagrama.puml'),
         ]
@@ -85,20 +93,33 @@ def main():
     try:
         with open(args.input, 'r', encoding='utf-8') as f:
             plantuml_code = f.read()
-        print(f"Convertendo {args.input}...")
+        print(f"Convertendo {args.input} para {args.language.upper()}...")
+        
         # Processamento do diagrama
         parser_backend = PlantUMLParser()
         diagrama = parser_backend.parse(plantuml_code)
-        # Usa o nome do diagrama se fornecido
-        generator = MainCodeGenerator(diagrama, args.output, diagram_name=args.diagram_name)
+        
+        # Escolhe o gerador baseado na linguagem
+        if args.language == 'python':
+            generator = PythonGenerator(diagrama, args.output, diagram_name=args.diagram_name)
+        elif args.language == 'csharp':
+            generator = CSharpGenerator(
+                parsed_diagram=diagrama, 
+                output_base_dir=args.output, 
+                diagram_name=args.diagram_name,
+                base_namespace=args.namespace
+            )
+        
         arquivos_gerados = generator.generate_files()
+        
         # NOVO: imprime o caminho da pasta gerada para o app.py capturar
         print(f"[PASTA_GERADA]: {os.path.relpath(generator.output_base_dir)}")
         
         if arquivos_gerados:
-            print(f"Arquivos gerados em '{os.path.abspath(args.output)}':")
+            print(f"Arquivos {args.language.upper()} gerados em '{os.path.abspath(generator.output_base_dir)}':")
             for arq in sorted(arquivos_gerados):
-                print(f"  - {arq}")
+                rel_path = os.path.relpath(arq, generator.output_base_dir)
+                print(f"  - {rel_path}")
         else:
             print("Nenhum arquivo foi gerado.")
 
