@@ -3,7 +3,6 @@ Módulo MainCodeGenerator para C# - Orquestrador Principal do Gerador.
 """
 from typing import List, Set, Optional, Union, Any, Tuple, Dict, Callable, TYPE_CHECKING
 import os
-import re
 
 from back_end.plantuml_parser.data_structures import (
     PlantUMLDiagrama, PlantUMLClasse, PlantUMLEnum, PlantUMLInterface, PlantUMLPacote
@@ -12,6 +11,7 @@ from back_end.plantuml_parser.data_structures import (
 from .type_mapper import TypeMapper
 from .using_manager import UsingManager
 from .structure_generators import ClassGenerator, EnumGenerator, InterfaceGenerator
+from .utils import sanitize_name_for_csharp, to_pascal_case
 
 class MainCodeGenerator:
     """Orquestra a geração de arquivos C# a partir de um diagrama PlantUML."""
@@ -24,7 +24,7 @@ class MainCodeGenerator:
         
         # Usa o nome do diagrama se fornecido, senão padrão "Diagrama"
         if diagram_name:
-            base_name = self._sanitize_name_for_csharp(diagram_name)
+            base_name = sanitize_name_for_csharp(diagram_name)
         else:
             base_name = "Diagrama"
         
@@ -47,25 +47,6 @@ class MainCodeGenerator:
 
         self.type_mapper: TypeMapper = TypeMapper()
         self.using_manager: UsingManager = UsingManager()
-
-    def _sanitize_name_for_csharp(self, name: str) -> str:
-        """Sanitiza nome para C#."""
-        import unicodedata
-        
-        # Remove acentos
-        name = name.replace('ç', 'c').replace('Ç', 'C')
-        nfkd = unicodedata.normalize('NFKD', name)
-        name = "".join([c for c in nfkd if not unicodedata.combining(c)])
-        
-        # Remove caracteres especiais
-        name = re.sub(r'[^0-9a-zA-Z_]', '', name)
-        
-        if not name:
-            return "UnnamedDiagram"
-        if name[0].isdigit():
-            name = "_" + name
-            
-        return name
 
     def _collect_all_structure_names(self) -> Set[str]:
         """Coleta recursivamente todos os nomes de estruturas definidas no diagrama."""
@@ -97,7 +78,7 @@ class MainCodeGenerator:
         structure_namespaces: Dict[str, str] = {}
         
         def map_from_package(package: PlantUMLPacote, parent_namespace: str = ""):
-            current_namespace = f"{parent_namespace}.{self._to_pascal_case(package.nome)}" if parent_namespace else self._to_pascal_case(package.nome)
+            current_namespace = f"{parent_namespace}.{to_pascal_case(package.nome)}" if parent_namespace else to_pascal_case(package.nome)
             full_namespace = f"{self.base_namespace}.{current_namespace}" if current_namespace else self.base_namespace
             
             for element in package.elementos:
@@ -121,35 +102,9 @@ class MainCodeGenerator:
         
         return structure_namespaces
 
-    def _to_pascal_case(self, name: str) -> str:
-        """Converte nome para PascalCase."""
-        import unicodedata
-        
-        # Remove acentos
-        name = name.replace('ç', 'c').replace('Ç', 'C')
-        nfkd = unicodedata.normalize('NFKD', name)
-        name = "".join([c for c in nfkd if not unicodedata.combining(c)])
-        
-        # Remove caracteres especiais
-        name = re.sub(r'[^0-9a-zA-Z_\s]', '', name)
-        
-        # Divide por espaços, underlines, etc.
-        parts = re.split(r'[_\s]+', name)
-        if len(parts) == 1 and name:
-            parts = re.findall(r'[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])', name)
-        
-        capitalized_parts = [p.capitalize() for p in parts if p]
-        pascal_case_name = "".join(capitalized_parts)
-        
-        if not pascal_case_name:
-            return "UnnamedStructure"
-        if pascal_case_name[0].isdigit():
-            return "_" + pascal_case_name
-        return pascal_case_name
-
     def _generate_file_for_structure(self, structure: Union[PlantUMLClasse, PlantUMLEnum, PlantUMLInterface], namespace: str, output_dir: str):
         """Gera um arquivo C# para uma estrutura."""
-        structure_name = self._to_pascal_case(structure.nome)
+        structure_name = to_pascal_case(structure.nome)
         file_path = os.path.join(output_dir, f"{structure_name}.cs")
         
         # Coleta using statements
@@ -169,8 +124,8 @@ class MainCodeGenerator:
             # Determina herança
             inheritance_parts = []
             if structure.classe_pai:
-                inheritance_parts.append(self._to_pascal_case(structure.classe_pai))
-            inheritance_parts.extend([self._to_pascal_case(iface) for iface in structure.interfaces_implementadas])
+                inheritance_parts.append(to_pascal_case(structure.classe_pai))
+            inheritance_parts.extend([to_pascal_case(iface) for iface in structure.interfaces_implementadas])
             
             inheritance_str = f" : {', '.join(inheritance_parts)}" if inheritance_parts else ""
             
@@ -193,7 +148,7 @@ class MainCodeGenerator:
             # Determina herança de interfaces
             inheritance_parts = []
             if hasattr(structure, 'interfaces_pai') and structure.interfaces_pai:
-                inheritance_parts.extend([self._to_pascal_case(iface) for iface in structure.interfaces_pai])
+                inheritance_parts.extend([to_pascal_case(iface) for iface in structure.interfaces_pai])
             
             inheritance_str = f" : {', '.join(inheritance_parts)}" if inheritance_parts else ""
             class_declaration = f"    public interface {structure_name}{inheritance_str}"
@@ -228,7 +183,7 @@ class MainCodeGenerator:
 
     def _create_package_directory(self, package: PlantUMLPacote, parent_dir: str, parent_namespace: str = "") -> str:
         """Cria diretório para um pacote e processa suas estruturas."""
-        package_name = self._to_pascal_case(package.nome)
+        package_name = to_pascal_case(package.nome)
         package_dir = os.path.join(parent_dir, package_name)
         os.makedirs(package_dir, exist_ok=True)
         

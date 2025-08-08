@@ -3,6 +3,7 @@
 Mapeamento de tipos PlantUML para tipos C#.
 """
 from typing import Dict, Tuple, Set
+from .utils import to_pascal_case
 
 class TypeMapper:
     """Mapeia tipos PlantUML para tipos C# equivalentes."""
@@ -99,7 +100,7 @@ class TypeMapper:
         
         # Se não encontrou mapeamento, assume que é um tipo customizado
         # e aplica PascalCase
-        return self._to_pascal_case(clean_type)
+        return to_pascal_case(clean_type)
     
     def _is_generic_type(self, type_str: str) -> bool:
         """Verifica se o tipo é genérico (contém < e >)."""
@@ -147,33 +148,6 @@ class TypeMapper:
             "Collection": "IEnumerable"
         }
         return generic_mapping.get(base_type, base_type)
-    
-    def _to_pascal_case(self, name: str) -> str:
-        """Converte nome para PascalCase."""
-        import re
-        import unicodedata
-        
-        # Remove acentos
-        name = name.replace('ç', 'c').replace('Ç', 'C')
-        nfkd = unicodedata.normalize('NFKD', name)
-        name = "".join([c for c in nfkd if not unicodedata.combining(c)])
-        
-        # Remove caracteres especiais e aspas
-        name = name.strip().replace('"', '').replace("'", "")
-        
-        # Divide por underline, espaço ou transição minúscula/maiúscula
-        parts = re.split(r'[_\s]+', name)
-        if len(parts) == 1 and name:
-            parts = re.findall(r'[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])', name)
-        
-        capitalized_parts = [p.capitalize() for p in parts if p]
-        pascal_case_name = "".join(capitalized_parts)
-        
-        if not pascal_case_name:
-            return "UnnamedType"
-        if pascal_case_name[0].isdigit():
-            return "_" + pascal_case_name
-        return pascal_case_name
     
     def get_required_usings(self, plantuml_type: str) -> Set[str]:
         """

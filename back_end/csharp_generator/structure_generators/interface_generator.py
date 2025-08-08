@@ -2,13 +2,16 @@
 Geração do corpo de interfaces C# a partir de estruturas PlantUMLInterface.
 """
 from typing import List, TYPE_CHECKING
-import re
-import unicodedata
 
 if TYPE_CHECKING:
     from back_end.plantuml_parser.data_structures import PlantUMLInterface, PlantUMLMetodo, PlantUMLAtributo
     from ..type_mapper import TypeMapper
     from ..using_manager import UsingManager
+
+from ..utils import (
+    to_pascal_case, to_camel_case, get_visibility_modifier,
+    CodeLineBuilder, format_method_signature, format_property_declaration
+)
 
 class InterfaceGenerator:
     """Gera o corpo de uma interface C#, incluindo métodos e propriedades."""
@@ -32,67 +35,13 @@ class InterfaceGenerator:
         self.using_manager: "UsingManager" = using_manager
         self.current_namespace: str = current_namespace
 
-    def _sanitize_name_for_csharp(self, name: str) -> str:
-        """Sanitiza nome para C#."""
-        # Remove acentos e caracteres especiais
-        name = name.replace('ç', 'c').replace('Ç', 'C')
-        nfkd = unicodedata.normalize('NFKD', name)
-        name = "".join([c for c in nfkd if not unicodedata.combining(c)])
-        
-        # Remove aspas e caracteres inválidos
-        name = name.replace('"', '').replace("'", "")
-        name = re.sub(r'[^0-9a-zA-Z_]', '', name)
-        
-        if not name:
-            return "_Unnamed"
-        if name[0].isdigit():
-            name = "_" + name
-        
-        return name
-
-    def _to_pascal_case(self, name: str) -> str:
-        """Converte nome para PascalCase."""
-        name = self._sanitize_name_for_csharp(name)
-        parts = re.split(r'[_\s]+', name)
-        if len(parts) == 1 and name:
-            parts = re.findall(r'[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])', name)
-        
-        capitalized_parts = [p.capitalize() for p in parts if p]
-        pascal_case_name = "".join(capitalized_parts)
-        
-        if not pascal_case_name:
-            return "_UnnamedMember"
-        if pascal_case_name[0].isdigit():
-            return "_" + pascal_case_name
-        return pascal_case_name
-
-    def _to_camel_case(self, name: str) -> str:
-        """Converte nome para camelCase."""
-        pascal_name = self._to_pascal_case(name)
-        if pascal_name:
-            return pascal_name[0].lower() + pascal_name[1:]
-        return pascal_name
-
-    def _get_visibility_modifier(self, visibilidade: str) -> str:
-        """
-        Converte a visibilidade PlantUML para modificador C#.
-        Para interfaces, todos os membros são implicitamente públicos.
-        """
-        # Em interfaces C#, todos os membros são implicitamente públicos
-        # Não precisamos especificar public explicitamente
-        return ""
-
     def _generate_static_properties_lines(self) -> List[str]:
         """
         Gera as linhas de código para as propriedades estáticas.
         Note: Em C#, interfaces não podem ter campos estáticos, 
         mas podem ter propriedades estáticas a partir do C# 8.0.
         """
-        lines: List[str] = []
-        indent_level = 2  # Dentro da interface
-        
-        def add_line(text: str): 
-            lines.append("    " * indent_level + text)
+        builder = CodeLineBuilder(2)  # Dentro da interface
 
         static_attributes = [attr for attr in self.interface.atributos if attr.is_static]
         if static_attributes:
@@ -101,25 +50,28 @@ class InterfaceGenerator:
                     attr.tipo, self.current_namespace
                 )
                 
-                property_name = self._to_pascal_case(attr.nome)
+                property_name = to_pascal_case(attr.nome)
                 
                 # Em interfaces C#, propriedades estáticas podem ter implementação padrão
                 if attr.default_value is not None:
-                    add_line(f"static {csharp_type} {property_name} {{ get; }} = {attr.default_value};")
+                    property_decl = format_property_declaration(
+                        "", csharp_type, property_name, 
+                        modifiers=["static"], default_value=attr.default_value,
+                        is_interface=True
+                    )
                 else:
                     # Propriedade estática sem implementação (deve ser implementada pela classe)
-                    add_line(f"static abstract {csharp_type} {property_name} {{ get; set; }}")
+                    builder.add_line(f"static abstract {csharp_type} {property_name} {{ get; set; }}")
+                    continue
+                
+                builder.add_line(property_decl)
             
-            add_line("")
-        return lines
+            builder.add_empty_line()
+        return builder.get_lines()
 
     def _generate_instance_properties_lines(self) -> List[str]:
         """Gera as linhas de código para as propriedades de instância."""
-        lines: List[str] = []
-        indent_level = 2  # Dentro da interface
-        
-        def add_line(text: str): 
-            lines.append("    " * indent_level + text)
+        builder = CodeLineBuilder(2)  # Dentro da interface
 
         instance_attributes = [attr for attr in self.interface.atributos if not attr.is_static]
         if instance_attributes:
@@ -128,19 +80,21 @@ class InterfaceGenerator:
                     attr.tipo, self.current_namespace
                 )
                 
-                property_name = self._to_pascal_case(attr.nome)
+                property_name = to_pascal_case(attr.nome)
                 
                 # Em interfaces, propriedades geralmente têm get e set
                 # A visibilidade é ignorada pois em interfaces tudo é público
-                add_line(f"{csharp_type} {property_name} {{ get; set; }}")
+                property_decl = format_property_declaration(
+                    "", csharp_type, property_name, is_interface=True
+                )
+                builder.add_line(property_decl)
             
-            add_line("")
-        return lines
+            builder.add_empty_line()
+        return builder.get_lines()
 
     def _generate_method_lines(self, met: "PlantUMLMetodo") -> List[str]:
         """Gera as linhas de código para um método da interface."""
-        method_lines: List[str] = []
-        base_indent_level = 2  # Dentro da interface
+        builder = CodeLineBuilder(2)  # Dentro da interface
         
         # Em interfaces C#, métodos não têm modificadores de visibilidade
         # e são implicitamente públicos e abstratos
@@ -153,7 +107,7 @@ class InterfaceGenerator:
         # Parâmetros do método
         param_list = []
         for p_obj in met.parametros:
-            param_name = self._to_camel_case(p_obj.nome)
+            param_name = to_camel_case(p_obj.nome)
             param_type = self.type_mapper.get_csharp_type_hint_and_imports(
                 p_obj.tipo, self.current_namespace
             )
@@ -164,33 +118,31 @@ class InterfaceGenerator:
             met.tipo_retorno, self.current_namespace
         ) if met.tipo_retorno else "void"
 
-        method_name = self._to_pascal_case(met.nome)
-        modifiers_str = " ".join(modifiers)
-        if modifiers_str:
-            modifiers_str += " "
-        params_str = ", ".join(param_list)
+        method_name = to_pascal_case(met.nome)
         
         # Assinatura do método
         if met.is_static:
             # Métodos estáticos em interfaces podem ter implementação padrão
-            method_lines.append("    " * base_indent_level + f"{modifiers_str}{return_type} {method_name}({params_str})")
-            method_lines.append("    " * base_indent_level + "{")
+            method_signature = format_method_signature(
+                "", return_type, method_name, param_list, modifiers, is_interface=True
+            )
+            builder.add_line(method_signature)
+            builder.add_line("{")
             
             # Implementação padrão
-            body_indent_level = 3
-            if return_type != "void":
-                method_lines.append("    " * body_indent_level + f"throw new NotImplementedException();")
-            else:
-                method_lines.append("    " * body_indent_level + f"throw new NotImplementedException();")
+            builder.add_line("throw new NotImplementedException();", 1)
             
-            method_lines.append("    " * base_indent_level + "}")
+            builder.add_line("}")
         else:
             # Método de instância - apenas assinatura (sem implementação)
-            method_lines.append("    " * base_indent_level + f"{return_type} {method_name}({params_str});")
+            method_signature = format_method_signature(
+                "", return_type, method_name, param_list, is_interface=True
+            )
+            builder.add_line(f"{method_signature};")
         
-        method_lines.append("    " * base_indent_level + "")
+        builder.add_empty_line()
         
-        return method_lines
+        return builder.get_lines()
 
     def generate_code_lines(self) -> List[str]:
         """Gera as linhas de código para o corpo completo da interface."""

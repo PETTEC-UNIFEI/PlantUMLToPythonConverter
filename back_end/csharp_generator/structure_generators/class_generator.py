@@ -2,12 +2,17 @@
 Geração do corpo de classes C# a partir de estruturas PlantUMLClasse.
 """
 from typing import List, Set, TYPE_CHECKING
-import re
 
 if TYPE_CHECKING:
     from back_end.plantuml_parser.data_structures import PlantUMLClasse, PlantUMLAtributo, PlantUMLMetodo
     from ..type_mapper import TypeMapper
     from ..using_manager import UsingManager
+
+from ..utils import (
+    sanitize_name_for_csharp, to_pascal_case, to_camel_case, 
+    get_visibility_modifier, CodeLineBuilder, format_method_signature,
+    format_property_declaration
+)
 
 class ClassGenerator:
     """Gera o corpo de uma classe C#, incluindo propriedades, construtor e métodos."""
@@ -22,66 +27,10 @@ class ClassGenerator:
         self.using_manager: "UsingManager" = using_manager
         self.current_namespace: str = current_namespace
 
-    def _sanitize_name_for_csharp(self, name: str) -> str:
-        """Sanitiza nome para C#."""
-        # Remove acentos e caracteres especiais
-        name = name.replace('ç', 'c').replace('Ç', 'C')
-        import unicodedata
-        nfkd = unicodedata.normalize('NFKD', name)
-        name = "".join([c for c in nfkd if not unicodedata.combining(c)])
-        
-        # Remove aspas e caracteres inválidos
-        name = name.replace('"', '').replace("'", "")
-        name = re.sub(r'[^0-9a-zA-Z_]', '', name)
-        
-        if not name:
-            return "_Unnamed"
-        if name[0].isdigit():
-            name = "_" + name
-        
-        return name
-
-    def _to_pascal_case(self, name: str) -> str:
-        """Converte nome para PascalCase."""
-        name = self._sanitize_name_for_csharp(name)
-        parts = re.split(r'[_\s]+', name)
-        if len(parts) == 1 and name:
-            parts = re.findall(r'[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])', name)
-        
-        capitalized_parts = [p.capitalize() for p in parts if p]
-        pascal_case_name = "".join(capitalized_parts)
-        
-        if not pascal_case_name:
-            return "_UnnamedClass"
-        if pascal_case_name[0].isdigit():
-            return "_" + pascal_case_name
-        return pascal_case_name
-
-    def _to_camel_case(self, name: str) -> str:
-        """Converte nome para camelCase."""
-        pascal_name = self._to_pascal_case(name)
-        if pascal_name:
-            return pascal_name[0].lower() + pascal_name[1:]
-        return pascal_name
-
-    def _get_visibility_modifier(self, visibilidade: str) -> str:
-        """Converte a visibilidade PlantUML para modificador C#."""
-        visibility_map = {
-            "+": "public",
-            "-": "private", 
-            "#": "protected",
-            "~": "internal"
-        }
-        return visibility_map.get(visibilidade, "public")
-
     def _generate_static_properties_lines(self) -> List[str]:
         """Gera as linhas de código para as propriedades estáticas."""
-        lines: List[str] = []
-        indent_level = 2  # Dentro da classe
+        builder = CodeLineBuilder(2)  # Dentro da classe
         
-        def add_line(text: str): 
-            lines.append("    " * indent_level + text)
-
         static_attributes = [attr for attr in self.classe.atributos if attr.is_static]
         if static_attributes:
             for attr in static_attributes:
@@ -89,28 +38,24 @@ class ClassGenerator:
                     attr.tipo, self.current_namespace
                 )
                 
-                property_name = self._to_pascal_case(attr.nome)
-                visibility = self._get_visibility_modifier(attr.visibilidade)
+                property_name = to_pascal_case(attr.nome)
+                visibility = get_visibility_modifier(attr.visibilidade)
                 
-                default_value = ""
-                if attr.default_value is not None:
-                    default_value = f" = {attr.default_value};"
-                else:
-                    default_value = ";"
+                default_value = attr.default_value if attr.default_value is not None else None
                 
-                add_line(f"{visibility} static {csharp_type} {property_name} {{ get; set; }}{default_value}")
+                property_decl = format_property_declaration(
+                    visibility, csharp_type, property_name, 
+                    modifiers=["static"], default_value=default_value
+                )
+                builder.add_line(property_decl)
             
-            add_line("")
-        return lines
+            builder.add_empty_line()
+        return builder.get_lines()
 
     def _generate_instance_properties_lines(self) -> List[str]:
         """Gera as linhas de código para as propriedades de instância."""
-        lines: List[str] = []
-        indent_level = 2  # Dentro da classe
+        builder = CodeLineBuilder(2)  # Dentro da classe
         
-        def add_line(text: str): 
-            lines.append("    " * indent_level + text)
-
         instance_attributes = [attr for attr in self.classe.atributos if not attr.is_static]
         if instance_attributes:
             for attr in instance_attributes:
@@ -118,20 +63,21 @@ class ClassGenerator:
                     attr.tipo, self.current_namespace
                 )
                 
-                property_name = self._to_pascal_case(attr.nome)
-                visibility = self._get_visibility_modifier(attr.visibilidade)
+                property_name = to_pascal_case(attr.nome)
+                visibility = get_visibility_modifier(attr.visibilidade)
                 
-                add_line(f"{visibility} {csharp_type} {property_name} {{ get; set; }}")
+                property_decl = format_property_declaration(
+                    visibility, csharp_type, property_name
+                )
+                builder.add_line(property_decl)
             
-            add_line("")
-        return lines
+            builder.add_empty_line()
+        return builder.get_lines()
 
     def _generate_constructor_lines(self) -> List[str]:
         """Gera as linhas de código para o construtor da classe."""
-        lines: List[str] = []
-        base_indent_level = 2
-        body_indent_level = 3
-
+        builder = CodeLineBuilder(2)  # Dentro da classe
+        
         # Parâmetros especiais para herança
         parent_required_params = []
         parent_required_args = []
@@ -150,13 +96,13 @@ class ClassGenerator:
         constructor_body_lines: List[str] = []
 
         for attr in instance_attributes:
-            param_name = self._to_camel_case(attr.nome)
+            param_name = to_camel_case(attr.nome)
             
             # Evita duplicar parâmetros da classe pai
             if param_name in [arg.split()[-1] for arg in parent_required_args]:
                 continue
                 
-            property_name = self._to_pascal_case(attr.nome)
+            property_name = to_pascal_case(attr.nome)
             
             csharp_type = self.type_mapper.get_csharp_type_hint_and_imports(
                 attr.tipo, self.current_namespace
@@ -188,7 +134,7 @@ class ClassGenerator:
         constructor_params = parent_required_params + required_params + optional_params
         
         # Cabeçalho do construtor
-        class_name = self._to_pascal_case(self.classe.nome)
+        class_name = to_pascal_case(self.classe.nome)
         visibility = "public"
         
         # Monta a chamada ao construtor base se necessário
@@ -198,34 +144,32 @@ class ClassGenerator:
         
         if constructor_params:
             params_str = ", ".join(constructor_params)
-            lines.append("    " * base_indent_level + f"{visibility} {class_name}({params_str}){base_call}")
+            builder.add_line(f"{visibility} {class_name}({params_str}){base_call}")
         else:
-            lines.append("    " * base_indent_level + f"{visibility} {class_name}(){base_call}")
+            builder.add_line(f"{visibility} {class_name}(){base_call}")
         
         # Abre o corpo do construtor
-        lines.append("    " * base_indent_level + "{")
+        builder.add_line("{")
         
         # Corpo do construtor
         if not constructor_body_lines:
-            lines.append("    " * body_indent_level + "// Construtor vazio")
+            builder.add_line("// Construtor vazio", 1)
         else:
             for line_code in constructor_body_lines:
-                lines.append("    " * body_indent_level + line_code)
+                builder.add_line(line_code, 1)
         
         # Fecha o construtor
-        lines.append("    " * base_indent_level + "}")
-        lines.append("    " * base_indent_level + "")
+        builder.add_line("}")
+        builder.add_empty_line()
         
-        return lines
+        return builder.get_lines()
 
     def _generate_method_lines(self, met: "PlantUMLMetodo") -> List[str]:
         """Gera as linhas de código para um método da classe."""
-        method_lines: List[str] = []
-        base_indent_level = 2
-        body_indent_level = 3
+        builder = CodeLineBuilder(2)  # Dentro da classe
         
-        visibility = self._get_visibility_modifier(met.visibilidade)
-        modifiers = [visibility]
+        visibility = get_visibility_modifier(met.visibilidade)
+        modifiers = []
         
         if met.is_static:
             modifiers.append("static")
@@ -235,7 +179,7 @@ class ClassGenerator:
         # Parâmetros do método
         param_list = []
         for p_obj in met.parametros:
-            param_name = self._to_camel_case(p_obj.nome)
+            param_name = to_camel_case(p_obj.nome)
             param_type = self.type_mapper.get_csharp_type_hint_and_imports(
                 p_obj.tipo, self.current_namespace
             )
@@ -246,28 +190,26 @@ class ClassGenerator:
             met.tipo_retorno, self.current_namespace
         ) if met.tipo_retorno else "void"
 
-        method_name = self._to_pascal_case(met.nome)
-        modifiers_str = " ".join(modifiers)
-        params_str = ", ".join(param_list)
+        method_name = to_pascal_case(met.nome)
         
         # Assinatura do método
-        method_lines.append("    " * base_indent_level + f"{modifiers_str} {return_type} {method_name}({params_str})")
-        method_lines.append("    " * base_indent_level + "{")
+        method_signature = format_method_signature(
+            visibility, return_type, method_name, param_list, modifiers
+        )
+        builder.add_line(method_signature)
+        builder.add_line("{")
         
         # Corpo do método
         if met.is_abstract:
             # Métodos abstratos não têm implementação em C# se a classe for abstrata
             pass
         else:
-            if return_type != "void":
-                method_lines.append("    " * body_indent_level + f"throw new NotImplementedException();")
-            else:
-                method_lines.append("    " * body_indent_level + f"throw new NotImplementedException();")
+            builder.add_line("throw new NotImplementedException();", 1)
         
-        method_lines.append("    " * base_indent_level + "}")
-        method_lines.append("    " * base_indent_level + "")
+        builder.add_line("}")
+        builder.add_empty_line()
         
-        return method_lines
+        return builder.get_lines()
 
     def generate_code_lines(self) -> List[str]:
         """Gera as linhas de código para o corpo completo da classe."""

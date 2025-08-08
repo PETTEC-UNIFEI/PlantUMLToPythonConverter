@@ -3,10 +3,10 @@ Gerenciamento de using statements para código C#.
 """
 from typing import Set, List, Optional, Union, TYPE_CHECKING, Any as TypingAny
 import os 
-import re 
 
 from back_end.plantuml_parser import data_structures
 from back_end.plantuml_parser.data_structures import PlantUMLClasse, PlantUMLEnum, PlantUMLInterface
+from .utils import to_pascal_case
 
 class UsingManager:
     """Gerencia using statements para arquivos C#."""
@@ -183,31 +183,8 @@ class UsingManager:
         for part in path_parts:
             if part and part not in ['.', '..']:
                 # Converte para PascalCase
-                pascal_part = self._to_pascal_case(part)
+                pascal_part = to_pascal_case(part)
                 if pascal_part:
                     namespace_parts.append(pascal_part)
         
         return '.'.join(namespace_parts) if namespace_parts else "DefaultNamespace"
-    
-    def _to_pascal_case(self, name: str) -> str:
-        """Converte nome para PascalCase."""
-        import unicodedata
-        
-        # Remove acentos
-        name = name.replace('ç', 'c').replace('Ç', 'C')
-        nfkd = unicodedata.normalize('NFKD', name)
-        name = "".join([c for c in nfkd if not unicodedata.combining(c)])
-        
-        # Remove caracteres especiais
-        name = re.sub(r'[^0-9a-zA-Z_]', '', name)
-        
-        # Divide por underline e capitaliza
-        parts = name.split('_')
-        capitalized_parts = [p.capitalize() for p in parts if p]
-        pascal_case_name = "".join(capitalized_parts)
-        
-        if not pascal_case_name:
-            return ""
-        if pascal_case_name[0].isdigit():
-            return "_" + pascal_case_name
-        return pascal_case_name
