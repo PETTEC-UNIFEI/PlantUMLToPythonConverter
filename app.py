@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 import re
+import sys
 
 DATA_DIAGRAMAS_DIR = os.path.join(os.path.dirname(__file__), 'data', 'diagramas')
 DATA_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'data', 'output_generated_code')
@@ -26,16 +27,47 @@ class Api:
                 temp_file.write(code)
             temp_file_path = plantuml_path
             # Chama o backend via subprocess, passando o nome do diagrama e a linguagem
+            # Usa o mesmo executável Python que está executando esta aplicação
+            # Tenta primeiro como módulo, depois como script direto
             cmd = [
-                'python', 'back_end/main_cli.py',
+                sys.executable, '-m', 'back_end.main_cli',
                 '--input', temp_file_path,
                 '--output', DATA_OUTPUT_DIR,
                 '--diagram-name', diagram_name,
-                '--linguagem', language  # Usa --linguagem conforme o CLI
+                '--language', language  
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            # Configura o ambiente para garantir que o Python path inclua o diretório atual
+            env = os.environ.copy()
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            env['PYTHONPATH'] = current_dir + os.pathsep + env.get('PYTHONPATH', '')
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=current_dir)
+            
+            # Se falhar como módulo, tenta como script direto
+            if result.returncode != 0 and "No module named" in (result.stderr or ''):
+                print("[DEBUG] Tentativa como módulo falhou, tentando como script direto...")
+                cmd = [
+                    sys.executable, 'back_end/main_cli.py',
+                    '--input', temp_file_path,
+                    '--output', DATA_OUTPUT_DIR,
+                    '--diagram-name', diagram_name,
+                    '--language', language
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=current_dir)
+            
+            # Debug: Imprime informações sobre o comando executado
+            print(f"[DEBUG] Comando executado: {' '.join(cmd)}")
+            print(f"[DEBUG] Python utilizado: {sys.executable}")
+            print(f"[DEBUG] Diretório de trabalho: {current_dir}")
+            print(f"[DEBUG] Código de retorno: {result.returncode}")
+            if result.stderr:
+                print(f"[DEBUG] Stderr: {result.stderr}")
+            
             if result.returncode != 0:
-                return f"Erro ao converter: {result.stderr or result.stdout}"
+                error_msg = result.stderr or result.stdout
+                print(f"[DEBUG] Erro detalhado: {error_msg}")
+                return f"Erro ao converter: {error_msg}"
             # NOVO: Captura o caminho da pasta gerada a partir da saída do backend
             output_path = None
             for line in (result.stdout or '').splitlines():
