@@ -19,8 +19,19 @@
 
     <!-- Cabeçalho -->
     <header class="bg-gray-800/50 border-b border-gray-700 p-4 shadow-md">
-        <h1 class="text-xl font-bold text-center text-white">PlantUML</h1>
-        <p class="text-sm text-gray-400 text-center">Cole seu diagrama de classes PlantUML à esquerda e veja o código Python à direita.</p>
+        <h1 class="text-xl font-bold text-center text-white">PlantUML para Código</h1>
+        <p class="text-sm text-gray-400 text-center mb-3">Cole seu diagrama de classes PlantUML à esquerda e veja o código gerado à direita.</p>
+        
+        <!-- Seleção de Linguagem -->
+        <div class="flex justify-center">
+            <div class="flex items-center gap-2">
+                <label for="languageSelect" class="text-sm font-medium text-gray-300">Linguagem:</label>
+                <select id="languageSelect" class="bg-gray-700 border border-gray-600 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 px-3 py-1.5 min-w-24">
+                    <option value="python">Python</option>
+                    <option value="csharp">C#</option>
+                </select>
+            </div>
+        </div>
     </header>
 
     <!-- Conteúdo Principal (Painéis) -->
@@ -56,10 +67,10 @@
             </div>
         </div>
 
-        <!-- Painel Direito: Saída Python -->
+        <!-- Painel Direito: Saída de Código -->
         <div class="painel">
             <div class="painel-header">
-                <h2 class="font-semibold text-lg whitespace-nowrap">Código Python</h2>
+                <h2 class="font-semibold text-lg whitespace-nowrap" id="outputTitle">Código Gerado</h2>
                 <button id="copyBtn" class="btn btn-blue flex-shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 7.5V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.03 1.125 0 1.131.094 1.976 1.057 1.976 2.192V7.5m-9 3c0-1.135.845-2.098 1.976-2.192a48.424 48.424 0 011.125 0c1.131.094 1.976 1.057 1.976 2.192V18a2.25 2.25 0 002.25 2.25h3.375c1.24 0 2.25-1.01 2.25-2.25V10.5c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.125 0c-1.131.094-1.976-1.057-1.976-2.192V7.5" />
@@ -68,7 +79,7 @@
                 </button>
             </div>
             <div class="painel-body">
-                <pre class="w-full h-full overflow-auto"><code id="pythonOutput" class="language-python text-sm font-mono text-gray-300"># O código Python gerado aparecerá aqui...</code></pre>
+                <pre class="w-full h-full overflow-auto"><code id="codeOutput" class="text-sm font-mono text-gray-300"># O código gerado aparecerá aqui...</code></pre>
             </div>
         </div>
     </main>
