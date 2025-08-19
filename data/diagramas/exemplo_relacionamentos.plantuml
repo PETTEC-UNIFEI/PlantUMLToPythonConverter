@@ -1,0 +1,19 @@
+@startuml exemplo_relacionamentos
+class Cliente
+class Pedido
+class Produto
+class Pagamento
+class Usuario
+class ItemPedido
+Cliente "1" -- "*" Pedido : faz
+Pedido "*" -- "1" Cliente : pertence
+Pedido "1" o-- "*" ItemPedido : possui
+ItemPedido "*" --> "1" Produto : refere
+Pedido "1" *-- "1" Pagamento : pago_por
+Usuario <|-- Cliente : especializa
+Usuario <|-- Administrador : especializa
+Pedido ..> Produto : consulta
+Pedido <|.. Pagamento : implementa
+Produto <|-- ProdutoDigital
+Produto <|-- ProdutoFisico
+@enduml

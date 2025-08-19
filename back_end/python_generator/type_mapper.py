@@ -36,6 +36,12 @@ class TypeMapper:
             typing_imports.add("Any")
             return "Any", standard_imports, typing_imports
 
+        # BUG 4 CORREÇÃO: Se for apenas "List" sem tipo interno, usar List[Any]
+        if plantuml_type.strip().lower() == "list":
+            typing_imports.add("List")
+            typing_imports.add("Any")
+            return "List[Any]", standard_imports, typing_imports
+
         # Remove aspas extras do tipo antes de processar
         plantuml_type = plantuml_type.strip().replace("''", "").replace("'", "").replace('"', "")
 

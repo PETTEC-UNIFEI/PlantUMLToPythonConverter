@@ -4,6 +4,9 @@ import subprocess
 import tempfile
 import re
 
+# Força o PyWebView a usar Qt (que já está disponível)
+os.environ['PYWEBVIEW_GUI'] = 'qt'
+
 DATA_DIAGRAMAS_DIR = os.path.join(os.path.dirname(__file__), 'data', 'diagramas')
 DATA_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'data', 'output_generated_code')
 

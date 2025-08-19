@@ -1,0 +1,26 @@
+@startuml exemplo_pacote
+package "Financeiro" {
+  class Fatura {
+    +id: int
+    +valor: float
+    +data: Date
+    +status: Status
+    +emitir(): bool
+  }
+  class Pagamento {
+    +id: int
+    +valor: float
+    +data: Date
+    +realizar(): bool
+  }
+}
+package "Pessoal" {
+  class Funcionario {
+    +matricula: int
+    +nome: str
+    +cargo: str
+    +admitir(): void
+    +demitir(): void
+  }
+}
+@enduml

@@ -82,7 +82,9 @@ class ImportManager:
     def collect_imports_for_structure(self, 
                                       structure: Union[PlantUMLClasse, PlantUMLEnum, PlantUMLInterface], 
                                       type_mapper: "TypeMapper",
-                                      current_file_module_dot_path: str
+                                      current_file_module_dot_path: str,
+                                      inheritance_from_relationships: List[str] = None,
+                                      relationships_for_structure: List = None
                                       ) -> List[str]:
         """Coleta e formata todas as instruções de import necessárias."""
         standard_imports: Set[str] = set()
@@ -109,7 +111,23 @@ class ImportManager:
             parent_type_names_plantuml.extend(structure.interfaces_implementadas or [])
         elif isinstance(structure, data_structures.PlantUMLInterface):
             parent_type_names_plantuml.extend(structure.interfaces_pai or [])
+        
+        # Adicionar herança dos relacionamentos
+        if inheritance_from_relationships:
+            parent_type_names_plantuml.extend(inheritance_from_relationships)
+            
         all_types_to_resolve_plantuml.update(parent_type_names_plantuml)
+
+        # Adicionar tipos dos relacionamentos
+        if relationships_for_structure:
+            for rel in relationships_for_structure:
+                all_types_to_resolve_plantuml.add(rel.destino)
+                # Adicionar Optional para relacionamentos (parâmetros do __init__)
+                typing_imports_needed.add("Optional")
+                # Adicionar List para relacionamentos múltiplos
+                is_multiple = rel.cardinalidade_destino and ("*" in rel.cardinalidade_destino or rel.cardinalidade_destino.strip() in ["0..*", "1..*", "n"])
+                if is_multiple:
+                    typing_imports_needed.add("List")
 
         if isinstance(structure, (data_structures.PlantUMLClasse, data_structures.PlantUMLInterface)):
             for attr in structure.atributos:
@@ -167,6 +185,9 @@ class ImportManager:
                     if attr.default_value is not None or \
                        (py_type_hint not in ["str", "int", "float", "bool", "Any", "None", "datetime.date"] and not py_type_hint.startswith("'")):
                         typing_imports_needed.add("Optional")
+                else:
+                    # CORREÇÃO 5: Adicionar ClassVar para atributos estáticos
+                    typing_imports_needed.add("ClassVar")
                         
         # Formatar Bloco de Imports
         import_lines: List[str] = []

@@ -86,6 +86,12 @@ class PlantUMLParser:
         if seta_token_type == 'ARROW_AGGREGATION_LEFT' or seta_value == "o--": return "agregacao"
         if seta_token_type == 'ARROW_AGGREGATION_RIGHT' or seta_value == "--o": return "agregacao"
 
+        # Relacionamentos one-to-many e many-to-one
+        if seta_token_type == 'ARROW_ONE_TO_MANY_LEFT' or seta_value == "||--o{": return "associacao"
+        if seta_token_type == 'ARROW_ONE_TO_MANY_RIGHT' or seta_value == "}o--||": return "associacao"
+        if seta_token_type == 'ARROW_MANY_TO_ONE_LEFT' or seta_value == "{o--||": return "associacao"
+        if seta_token_type == 'ARROW_MANY_TO_ONE_RIGHT' or seta_value == "||--o{": return "associacao"
+
         # Dependências (pontilhadas)
         if seta_token_type == 'ARROW_DIRECTED_DEPENDENCY_LEFT' or seta_value == "<..": return "dependencia"
         if seta_token_type == 'ARROW_DIRECTED_DEPENDENCY_RIGHT' or seta_value == "..>": return "dependencia"
@@ -194,7 +200,7 @@ class PlantUMLParser:
             
             if self._peek_token() and self._peek_token().type == 'EQUALS':
                 self._consume_token('EQUALS')
-                if not self._peek_token() or self._peek_token().type not in ['ID', 'QUOTED_STRING']: 
+                if not self._peek_token() or self._peek_token().type not in ['ID', 'QUOTED_STRING', 'NUMBER']: 
                      self._parse_error(f"Esperado valor default para o atributo {nome_membro}")
                 valor_default_token = self._consume_token() 
                 valor_default = valor_default_token.value
@@ -216,10 +222,19 @@ class PlantUMLParser:
             token_membro_inicio = self._peek_token()
             if isinstance(estrutura_atual, PlantUMLEnum):
                 if token_membro_inicio.type == 'ID':
-                    valor_enum = self._consume_token('ID').value
-                    if hasattr(estrutura_atual, 'valores_enum'): 
-                        estrutura_atual.valores_enum.append(valor_enum)
-                        estrutura_atual.atributos.append(PlantUMLAtributo(nome=valor_enum, visibilidade="+"))
+                    # Parsear múltiplos valores de enum separados por vírgula
+                    while self._peek_token() and self._peek_token().type == 'ID':
+                        valor_enum = self._consume_token('ID').value
+                        if hasattr(estrutura_atual, 'valores_enum'): 
+                            estrutura_atual.valores_enum.append(valor_enum)
+                            estrutura_atual.atributos.append(PlantUMLAtributo(nome=valor_enum, visibilidade="+"))
+                        
+                        # Verificar se há vírgula para próximo valor
+                        if self._peek_token() and self._peek_token().type == 'COMMA':
+                            self._consume_token('COMMA')  # Consume a vírgula
+                            # Continuar o loop para pegar o próximo ID
+                        else:
+                            break  # Não há mais valores
                 elif token_membro_inicio.type == 'RBRACE': 
                     break
                 else:
@@ -373,6 +388,7 @@ class PlantUMLParser:
         destino = destino_token.value
         
         label = None
+        classe_associacao = None
         if self._peek_token() and self._peek_token().type == 'COLON':
             self._consume_token('COLON')
             # print("DEBUG: COLON para label consumido.")
@@ -380,6 +396,35 @@ class PlantUMLParser:
                 label_token = self._consume_token()
                 label = label_token.value
                 # print(f"DEBUG: Label consumido: {label_token}")
+                
+                # Após consumir o label, verificar se há outro COLON para classe de associação
+                if self._peek_token() and self._peek_token().type == 'COLON':
+                    self._consume_token('COLON')  # Consome o segundo ':'
+                    # Agora verificar se há classe de associação: (NomeClasse)
+                    if self._peek_token() and self._peek_token().type == 'LPAREN':
+                        self._consume_token('LPAREN')
+                        if self._peek_token() and self._peek_token().type in ['ID', 'QUOTED_STRING']:
+                            classe_associacao_token = self._consume_token()
+                            classe_associacao = classe_associacao_token.value
+                            if self._peek_token() and self._peek_token().type == 'RPAREN':
+                                self._consume_token('RPAREN')
+                            else:
+                                self._parse_error("Esperado ')' após nome da classe de associação")
+                        else:
+                            self._parse_error("Esperado nome da classe de associação após '('")
+                            
+            # Verificar se há uma classe de associação diretamente após primeiro : (sem label)
+            elif self._peek_token() and self._peek_token().type == 'LPAREN':
+                self._consume_token('LPAREN')
+                if self._peek_token() and self._peek_token().type in ['ID', 'QUOTED_STRING']:
+                    classe_associacao_token = self._consume_token()
+                    classe_associacao = classe_associacao_token.value
+                    if self._peek_token() and self._peek_token().type == 'RPAREN':
+                        self._consume_token('RPAREN')
+                    else:
+                        self._parse_error("Esperado ')' após nome da classe de associação")
+                else:
+                    self._parse_error("Esperado nome da classe de associação após '('")
             # PlantUML permite label vazio após ':', nosso lexer não gera token.
             # Se não for ID ou QUOTED_STRING, assumimos que não há label após ':' ou o lexer não pegou.
 
@@ -389,17 +434,65 @@ class PlantUMLParser:
         if tipo_rel == "heranca" and seta_token.type == 'ARROW_INHERITANCE_RIGHT':
              origem, destino = destino, origem
         elif tipo_rel == "implementacao":
+            # Para implementação, a lógica é: A <|.. B significa B implementa A
+            # Então A (interface) deve ser origem, B (implementador) deve ser destino
             if seta_token.type == 'ARROW_IMPLEMENTATION_RIGHT_STRONG' or \
                (seta_token.type == 'ARROW_DIRECTED_DEPENDENCY_RIGHT' and ".." in seta_token.value and "|" in seta_token.value): # ..|>
-                 origem, destino = destino, origem
-            # Para <|.. e <.., a origem já é a interface/pai pela definição do token do lexer
+                # Para setas da direita (..|>), não trocar - já está correto
+                pass
+            else:
+                # Para setas da esquerda (<|..), trocar para que a interface seja origem
+                origem, destino = destino, origem
 
         novo_relacionamento = PlantUMLRelacionamento(
             origem=origem, destino=destino, tipo=tipo_rel, label=label,
             cardinalidade_origem=card_origem, cardinalidade_destino=card_destino
         )
         self.diagrama.adicionar_relacionamento(novo_relacionamento)
+        
+        # Se há uma classe de associação, criar relacionamentos adicionais
+        if classe_associacao:
+            # Criar relacionamento da classe de associação para a origem
+            rel_associacao_origem = PlantUMLRelacionamento(
+                origem=classe_associacao, destino=origem, tipo="associacao",
+                label=None, cardinalidade_origem="1", cardinalidade_destino=card_origem or "1"
+            )
+            self.diagrama.adicionar_relacionamento(rel_associacao_origem)
+            
+            # Criar relacionamento da classe de associação para o destino
+            rel_associacao_destino = PlantUMLRelacionamento(
+                origem=classe_associacao, destino=destino, tipo="associacao", 
+                label=None, cardinalidade_origem="1", cardinalidade_destino=card_destino or "1"
+            )
+            self.diagrama.adicionar_relacionamento(rel_associacao_destino)
+        
         # print(f"DEBUG: Relacionamento ADICIONADO: {novo_relacionamento}")
+
+    def _parse_nota(self):
+        """Parseia e ignora um bloco de nota."""
+        self._consume_token('NOTE') # Consome 'note'
+        
+        # Consome a posição da nota (left, right, top, bottom, etc.) se presente
+        if self._peek_token() and self._peek_token().type == 'ID':
+            self._consume_token('ID') # posição
+            
+        # Consome 'of' se presente
+        if self._peek_token() and self._peek_token().type == 'ID' and self._peek_token().value.lower() == 'of':
+            self._consume_token('ID') # 'of'
+            
+        # Consome o nome da classe relacionada se presente
+        if self._peek_token() and self._peek_token().type in ['ID', 'QUOTED_STRING']:
+            self._consume_token() # nome da classe
+            
+        # Ignora todo o conteúdo até encontrar 'end note'
+        while self._peek_token():
+            if (self._peek_token().type == 'END' and 
+                self._peek_token(1) and self._peek_token(1).type == 'NOTE'):
+                self._consume_token('END')
+                self._consume_token('NOTE')
+                break
+            else:
+                self._consume_token() # Ignora qualquer token
 
     def parse(self, plantuml_code: Optional[str] = None) -> PlantUMLDiagrama:
         """
@@ -462,6 +555,8 @@ class PlantUMLParser:
                 self._parse_declaracao_pacote()
             elif token.type in ['ABSTRACT', 'CLASS', 'INTERFACE', 'ENUM']:
                 self._parse_declaracao_estrutura()
+            elif token.type == 'NOTE':
+                self._parse_nota()
             elif token.type in ['ID', 'QUOTED_STRING']: # Potencial início de relacionamento
                 # Heurística mais forte para relacionamento
                 is_relationship_candidate = False

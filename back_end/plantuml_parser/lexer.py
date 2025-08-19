@@ -7,8 +7,10 @@ tokens = (
     'AT_STARTUML', 'AT_ENDUML',
     'PACKAGE', 'CLASS', 'ABSTRACT', 'INTERFACE', 'ENUM',
     'EXTENDS', 'IMPLEMENTS',
+    'NOTE', 'END',
     'ID',
     'QUOTED_STRING',
+    'NUMBER',
     'LBRACE', 'RBRACE', 
     'LPAREN', 'RPAREN', 
     'COLON', 'COMMA', 'EQUALS',
@@ -30,6 +32,10 @@ tokens = (
     'ARROW_DIRECTED_DEPENDENCY_LEFT',
     'ARROW_ASSOCIATION_LINE',
     'ARROW_DEPENDENCY_LINE',
+    'ARROW_ONE_TO_MANY_LEFT',
+    'ARROW_ONE_TO_MANY_RIGHT',
+    'ARROW_MANY_TO_ONE_LEFT', 
+    'ARROW_MANY_TO_ONE_RIGHT',
     'VISIBILITY',
 )
 
@@ -51,6 +57,14 @@ def t_PACKAGE(t):
 
 def t_ABSTRACT(t):
     r'abstract'
+    return t
+
+def t_NOTE(t):
+    r'note'
+    return t
+
+def t_END(t):
+    r'end'
     return t
 
 def t_CLASS(t):
@@ -139,12 +153,37 @@ def t_ARROW_DIRECTED_DEPENDENCY_LEFT(t):
     r'<\.\.'
     return t
 
+def t_ARROW_ONE_TO_MANY_LEFT(t):
+    r'\|\|--o\{'
+    return t
+
+def t_ARROW_ONE_TO_MANY_RIGHT(t):
+    r'\}o--\|\|'
+    return t
+
+def t_ARROW_MANY_TO_ONE_LEFT(t):
+    r'\{o--\|\|'
+    return t
+
+def t_ARROW_MANY_TO_ONE_RIGHT(t):
+    r'\|\|--o\{'
+    return t
+
 def t_ARROW_ASSOCIATION_LINE(t):
     r'--'
     return t
 
 def t_ARROW_DEPENDENCY_LINE(t):
     r'\.\.'
+    return t
+
+def t_NUMBER(t):
+    r'-?\d+(\.\d+)?'
+    # Converte para int se for inteiro, senão float
+    if '.' in t.value:
+        t.value = float(t.value)
+    else:
+        t.value = int(t.value)
     return t
 
 def t_VISIBILITY(t):

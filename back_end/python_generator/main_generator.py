@@ -55,7 +55,67 @@ class MainCodeGenerator:
                 elif isinstance(item, PlantUMLPacote):
                     _collect_recursive(item.elementos)
         _collect_recursive(self.parsed_diagram.elementos)
+        
+        # Adiciona classes mencionadas nos relacionamentos que podem não estar explicitamente definidas
+        # Primeiro checa se há relacionamentos para evitar erro
+        if hasattr(self.parsed_diagram, 'relacionamentos') and self.parsed_diagram.relacionamentos:
+            for rel in self.parsed_diagram.relacionamentos:
+                names.add(rel.origem)
+                names.add(rel.destino)
+        
         return names
+    
+    def _add_missing_classes_from_relationships(self):
+        """Adiciona classes que estão nos relacionamentos mas não foram definidas explicitamente."""
+        # Coleta todas as classes já definidas
+        defined_classes = set()
+        def _collect_defined(elements: List[Any]):
+            for item in elements:
+                if isinstance(item, PlantUMLClasse):
+                    defined_classes.add(item.nome)
+                elif isinstance(item, PlantUMLPacote):
+                    _collect_defined(item.elementos)
+        
+        _collect_defined(self.parsed_diagram.elementos)
+        
+        # Coleta classes dos relacionamentos
+        if hasattr(self.parsed_diagram, 'relacionamentos') and self.parsed_diagram.relacionamentos:
+            relationship_classes = self._collect_all_classes_from_relationships()
+            
+            # Cria classes simples para as que estão faltando
+            missing_classes = relationship_classes - defined_classes
+            for class_name in missing_classes:
+                new_class = PlantUMLClasse(nome=class_name)
+                # Adiciona na raiz do diagrama
+                self.parsed_diagram.elementos.append(new_class)
+    
+    def _mark_classes_as_interfaces(self, interface_classes: Set[str]):
+        """Marca classes como interfaces (abstract) para que sejam geradas como ABC."""
+        def _mark_recursive(elements: List[Any]):
+            for item in elements:
+                if isinstance(item, PlantUMLClasse) and item.nome in interface_classes:
+                    item.is_abstract = True
+                    # Adiciona um método abstrato genérico se não tiver métodos
+                    if not item.metodos:
+                        from back_end.plantuml_parser.data_structures import PlantUMLMetodo
+                        abstract_method = PlantUMLMetodo(
+                            nome="processar",
+                            tipo_retorno="bool",
+                            is_abstract=True
+                        )
+                        item.metodos.append(abstract_method)
+                elif isinstance(item, PlantUMLPacote):
+                    _mark_recursive(item.elementos)
+        
+        _mark_recursive(self.parsed_diagram.elementos)
+    
+    def _collect_all_classes_from_relationships(self) -> Set[str]:
+        """Coleta todas as classes mencionadas nos relacionamentos que precisam ser geradas."""
+        classes = set()
+        for rel in getattr(self.parsed_diagram, 'relacionamentos', []):
+            classes.add(rel.origem)
+            classes.add(rel.destino)
+        return classes
 
     def _map_structure_module_paths(self) -> dict[str, str]:
         """Mapeia o nome original de cada estrutura para seu caminho de módulo Python."""
@@ -71,6 +131,91 @@ class MainCodeGenerator:
         _map_recursive(self.parsed_diagram.elementos, [])
         return paths
 
+    def _get_relationships_for_class(self, class_name: str) -> list:
+        """Retorna relacionamentos que devem virar atributos na classe (baseado na direção da seta PlantUML)."""
+        all_rels = []
+        
+        for rel in getattr(self.parsed_diagram, 'relacionamentos', []):
+            if rel.tipo in ["associacao", "composicao", "agregacao"]:
+                # Para composição e agregação: apenas origem tem o atributo
+                if rel.tipo in ["composicao", "agregacao"] and rel.origem == class_name:
+                    all_rels.append(rel)
+                # Para associação: ambos os lados podem ter atributos
+                elif rel.tipo == "associacao":
+                    if rel.origem == class_name:
+                        all_rels.append(rel)
+                    elif rel.destino == class_name:
+                        # Cria relacionamento reverso para associação bidirecional
+                        from back_end.plantuml_parser.data_structures.plantuml_relacionamento import PlantUMLRelacionamento
+                        reverse_rel = PlantUMLRelacionamento(
+                            origem=rel.destino,
+                            destino=rel.origem,
+                            tipo=rel.tipo,
+                            label=rel.label,
+                            cardinalidade_origem=rel.cardinalidade_destino,
+                            cardinalidade_destino=rel.cardinalidade_origem
+                        )
+                        all_rels.append(reverse_rel)
+        
+        return all_rels
+    
+    def _get_inheritance_relationships(self) -> dict:
+        """Retorna um mapeamento de classes filhas para suas classes pai com base nos relacionamentos de herança e implementação."""
+        inheritance_map = {}
+        for rel in getattr(self.parsed_diagram, 'relacionamentos', []):
+            if rel.tipo == "heranca":
+                # Em PlantUML, A <|-- B significa B herda de A
+                # rel.origem é a classe pai, rel.destino é a classe filha
+                child_class = rel.destino
+                parent_class = rel.origem
+                if child_class not in inheritance_map:
+                    inheritance_map[child_class] = []
+                inheritance_map[child_class].append(parent_class)
+            elif rel.tipo == "implementacao":
+                # Em PlantUML, A <|.. B significa B implementa A
+                # rel.origem é a interface, rel.destino é a classe implementadora
+                implementing_class = rel.destino
+                interface_class = rel.origem
+                if implementing_class not in inheritance_map:
+                    inheritance_map[implementing_class] = []
+                inheritance_map[implementing_class].append(interface_class)
+        return inheritance_map
+    
+    def _get_parent_classes(self) -> Set[str]:
+        """Retorna um conjunto de classes que são pais em relacionamentos de herança."""
+        parent_classes = set()
+        for rel in getattr(self.parsed_diagram, 'relacionamentos', []):
+            if rel.tipo == "heranca":
+                parent_classes.add(rel.origem)
+        return parent_classes
+    
+    def _enrich_parent_class_with_basic_attributes(self, structure: "PlantUMLClasse") -> "PlantUMLClasse":
+        """Enriquece uma classe pai com atributos básicos se ela estiver vazia."""
+        if len(structure.atributos) == 0 and len(structure.metodos) == 0:
+            # Adiciona atributos básicos comuns
+            from back_end.plantuml_parser.data_structures.plantuml_atributo import PlantUMLAtributo
+            
+            # Adiciona um id básico
+            id_attr = PlantUMLAtributo(nome="id", tipo="int", visibilidade="+")
+            structure.atributos.append(id_attr)
+            
+            # Se for uma classe como Usuario, adiciona nome
+            if structure.nome.lower() in ["usuario", "user", "pessoa", "person"]:
+                nome_attr = PlantUMLAtributo(nome="nome", tipo="str", visibilidade="+")
+                structure.atributos.append(nome_attr)
+        
+        return structure
+    
+    def _get_interface_classes_from_relationships(self) -> Set[str]:
+        """Retorna um conjunto de classes que devem ser tratadas como interfaces (ABC) baseado nos relacionamentos de implementação."""
+        interface_classes = set()
+        for rel in getattr(self.parsed_diagram, 'relacionamentos', []):
+            if rel.tipo == "implementacao":
+                # Em PlantUML, A <|.. B significa B implementa A
+                # rel.origem é a interface que deve ser ABC
+                interface_classes.add(rel.origem)
+        return interface_classes
+
     def _generate_file_for_structure(self, 
                                      structure: Union[PlantUMLClasse, PlantUMLEnum, PlantUMLInterface], 
                                      current_disk_path: str, 
@@ -83,8 +228,11 @@ class MainCodeGenerator:
         current_file_module_dot_path = ".".join(package_dot_path_parts + [current_file_module_name_sanitized])
 
         # 1. Coletar e Adicionar Imports
+        inheritance_map = self._get_inheritance_relationships()
+        inheritance_from_rels = inheritance_map.get(structure.nome, [])
+        relationships_for_structure = self._get_relationships_for_class(structure.nome)
         import_lines = self.import_manager.collect_imports_for_structure(
-            structure, self.type_mapper, current_file_module_dot_path
+            structure, self.type_mapper, current_file_module_dot_path, inheritance_from_rels, relationships_for_structure
         )
         file_content_lines.extend(import_lines)
 
@@ -92,11 +240,17 @@ class MainCodeGenerator:
         parent_classes_py_hints_for_class_def: List[str] = []
         parent_type_names_plantuml: List[str] = []
 
+        # Adicionar herança definida na estrutura original
         if isinstance(structure, PlantUMLClasse):
             if structure.classe_pai: parent_type_names_plantuml.append(structure.classe_pai)
             parent_type_names_plantuml.extend(structure.interfaces_implementadas or [])
         elif isinstance(structure, PlantUMLInterface):
             parent_type_names_plantuml.extend(structure.interfaces_pai or [])
+        
+        # Adicionar herança dos relacionamentos
+        inheritance_map = self._get_inheritance_relationships()
+        if structure.nome in inheritance_map:
+            parent_type_names_plantuml.extend(inheritance_map[structure.nome])
         
         for p_type_name in parent_type_names_plantuml:
             if p_type_name:
@@ -130,11 +284,19 @@ class MainCodeGenerator:
             interface_gen = InterfaceGenerator(structure, self.type_mapper, current_file_module_dot_path)
             body_lines.extend(interface_gen.generate_code_lines())
         elif isinstance(structure, PlantUMLClasse):
-            class_gen = ClassGenerator(structure, self.type_mapper, current_file_module_dot_path)
+            # Enriquece classes pai com atributos básicos se necessário
+            parent_classes = self._get_parent_classes()
+            if structure.nome in parent_classes:
+                structure = self._enrich_parent_class_with_basic_attributes(structure)
+            
+            rels = self._get_relationships_for_class(structure.nome)
+            # Obtém informações sobre herança dos relacionamentos
+            inheritance_map = self._get_inheritance_relationships()
+            parent_classes_from_rels = inheritance_map.get(structure.nome, [])
+            class_gen = ClassGenerator(structure, self.type_mapper, current_file_module_dot_path, rels, parent_classes_from_rels)
             body_lines.extend(class_gen.generate_code_lines())
-        
         file_content_lines.extend(body_lines)
-        file_content_lines.append("") 
+        file_content_lines.append("")
 
         # 5. Salvar o Arquivo
         file_name = f"{sanitize_name_for_python_module(structure.nome)}.py"
@@ -201,7 +363,23 @@ class MainCodeGenerator:
                     package_content_map[current_package_key]["sub_packages"].append(sanitized_pkg_name)
                     _organize_for_inits(item.elementos, current_package_key_parts + [sanitized_pkg_name])
         
+        # Organizar primeiro as estruturas explícitas
         _organize_for_inits(self.parsed_diagram.elementos, [])
+        
+        # Garantir que todas as classes dos relacionamentos estejam no root
+        if hasattr(self.parsed_diagram, 'relacionamentos') and self.parsed_diagram.relacionamentos:
+            all_relationship_classes = self._collect_all_classes_from_relationships()
+            existing_root_classes = set(package_content_map["root"]["structures"])
+            for class_name in all_relationship_classes:
+                if class_name not in existing_root_classes:
+                    package_content_map["root"]["structures"].append(class_name)
+        
+        # Adicionar classes faltantes dos relacionamentos à estrutura principal
+        self._add_missing_classes_from_relationships()
+        
+        # Marcar classes como interfaces baseado nos relacionamentos
+        interface_classes = self._get_interface_classes_from_relationships()
+        self._mark_classes_as_interfaces(interface_classes)
 
         def _generate_recursive(elements: List[Any], current_disk_path: str, current_package_dot_path_parts: List[str]):
             os.makedirs(current_disk_path, exist_ok=True)
@@ -234,3 +412,12 @@ class MainCodeGenerator:
             self.generated_files_manifest.append(os.path.relpath(rel_file_path, self.output_base_dir))
         
         return self.generated_files_manifest
+def gerar_codigo_python(plantuml_code: str, output_base_dir: str, diagram_name: str = None):
+    """
+    Função utilitária para gerar código Python a partir de um diagrama PlantUML (string).
+    """
+    from back_end.plantuml_parser.parser import PlantUMLParser
+    parser = PlantUMLParser()
+    diagrama = parser.parse(plantuml_code)
+    generator = MainCodeGenerator(diagrama, output_base_dir, diagram_name)
+    return generator.generate_files()

@@ -13,10 +13,14 @@ class ClassGenerator:
     def __init__(self, 
                  class_structure: "PlantUMLClasse", 
                  type_mapper: "TypeMapper", 
-                 current_file_module_dot_path: str):
+                 current_file_module_dot_path: str,
+                 relacionamentos: list = None,
+                 parent_classes_from_relationships: list = None):
         self.classe: "PlantUMLClasse" = class_structure
         self.type_mapper: "TypeMapper" = type_mapper
         self.current_file_module_dot_path: str = current_file_module_dot_path
+        self.relacionamentos: list = relacionamentos or []
+        self.parent_classes_from_relationships: list = parent_classes_from_relationships or []
 
     def _generate_static_attribute_lines(self) -> List[str]:
         """Gera as linhas de código para os atributos estáticos (de classe)."""
@@ -33,16 +37,33 @@ class ClassGenerator:
                 attr_name_py = sanitize_name_for_python_module(attr.nome).upper()
                 default_val_str = ""
                 if attr.default_value is not None:
-                    default_val_str = f" = {attr.default_value}"
+                    # CORREÇÃO: Verificar se o valor padrão é string e adicionar aspas se necessário
+                    default_value = attr.default_value
+                    # BUG 1 CORREÇÃO: Converter valores booleanos do PlantUML para Python
+                    if isinstance(default_value, str) and default_value.lower() == 'true':
+                        default_val_str = " = True"
+                    elif isinstance(default_value, str) and default_value.lower() == 'false':
+                        default_val_str = " = False"
+                    elif isinstance(default_value, str) and not default_value.isdigit() and default_value not in ['True', 'False', 'None']:
+                        # É uma string que não é número nem booleano
+                        default_val_str = f' = "{default_value}"'
+                    else:
+                        default_val_str = f" = {default_value}"
                 elif py_type_hint != "Any" and py_type_hint != "None":
-                    default_val_str = f": {py_type_hint} = None"
+                    default_val_str = f" = None"
                 elif py_type_hint == "Any":
-                     default_val_str = f": {py_type_hint} = None"
+                     default_val_str = f" = None"
                 else: # None
                      default_val_str = " = None"
-                add_s_line(f"{attr_name_py}{default_val_str}")
+                
+                # CORREÇÃO 5: Usar ClassVar para atributos estáticos
+                add_s_line(f"{attr_name_py}: ClassVar[{py_type_hint}]{default_val_str}")
             add_s_line("")
         return lines
+
+    def _generate_relationship_class_attributes(self) -> List[str]:
+        """Relacionamentos não devem gerar atributos de classe - apenas de instância no __init__."""
+        return []
 
     def _generate_init_lines(self) -> List[str]:
         """Gera as linhas de código para o método __init__ da classe."""
@@ -52,19 +73,111 @@ class ClassGenerator:
 
         parent_required_params = []
         parent_required_args = []
-        if self.classe.classe_pai == "Pessoa do Sistema":
-            parent_required_params = ["nome: str", "id: str"]
-            parent_required_args = ["nome", "id"]
+        
+        # BUGS 2 e 3 CORREÇÃO: Detectar dinamicamente parâmetros da classe pai baseado em seus atributos
+        if self.classe.classe_pai or self.parent_classes_from_relationships:
+            parent_name = self.classe.classe_pai or (self.parent_classes_from_relationships[0] if self.parent_classes_from_relationships else "")
+            
+            # Buscar a classe pai no diagrama para analisar seus atributos
+            parent_class = None
+            if hasattr(self.type_mapper, 'parsed_diagram') and self.type_mapper.parsed_diagram:
+                for elemento in self.type_mapper.parsed_diagram.elementos:
+                    if hasattr(elemento, 'nome') and elemento.nome == parent_name:
+                        parent_class = elemento
+                        break
+            
+            # Se encontrou a classe pai e é uma classe concreta (não interface)
+            if parent_class and hasattr(parent_class, 'atributos') and not hasattr(parent_class, 'is_interface'):
+                # Extrair TODOS os atributos não-estáticos da classe pai (com e sem valor padrão)
+                for attr in parent_class.atributos:
+                    if not attr.is_static:
+                        param_name = sanitize_name_for_python_module(attr.nome)
+                        py_type_hint, _, _ = self.type_mapper.get_python_type_hint_and_imports(
+                            attr.tipo, self.current_file_module_dot_path
+                        )
+                        
+                        # Se tem valor padrão, é opcional no construtor
+                        if attr.default_value is not None:
+                            # Converter valor padrão booleano
+                            default_val = attr.default_value
+                            if isinstance(default_val, str) and default_val.lower() == 'true':
+                                default_val = 'True'
+                            elif isinstance(default_val, str) and default_val.lower() == 'false':
+                                default_val = 'False'
+                            elif isinstance(default_val, str) and not default_val.isdigit() and default_val not in ['True', 'False', 'None']:
+                                default_val = f'"{default_val}"'
+                            
+                            parent_required_params.append(f"{param_name}: {py_type_hint} = {default_val}")
+                        else:
+                            parent_required_params.append(f"{param_name}: {py_type_hint}")
+                        
+                        parent_required_args.append(param_name)
+            # Para interfaces ou classes não encontradas, não gerar parâmetros
 
         instance_attributes = [attr for attr in self.classe.atributos if not attr.is_static]
-        if not instance_attributes and not self.classe.classe_pai:
+        relationship_attributes = []
+        used_names = set()
+        
+        # Consolida relacionamentos únicos por classe de destino
+        consolidated_relationships = {}
+        for rel in self.relacionamentos:
+            dest_class = rel.destino
+            if dest_class not in consolidated_relationships:
+                consolidated_relationships[dest_class] = rel
+            else:
+                # Se já existe, mantém o que tem cardinalidade múltipla (*)
+                existing = consolidated_relationships[dest_class]
+                if rel.cardinalidade_destino and "*" in rel.cardinalidade_destino:
+                    consolidated_relationships[dest_class] = rel
+        
+        for dest_class, rel in consolidated_relationships.items():
+            # Usar o nome da classe de destino como base para o atributo
+            base_name = sanitize_name_for_python_module(dest_class)
+            
+            # BUG 5 CORREÇÃO: Classes de associação devem ter relacionamentos singulares
+            is_association_class = self._is_association_class()
+            is_multiple = (not is_association_class and 
+                          rel.cardinalidade_destino and 
+                          ("*" in rel.cardinalidade_destino or rel.cardinalidade_destino.strip() in ["0..*", "1..*", "n"]))
+            
+            # Para relacionamentos múltiplos, usar plural
+            if is_multiple:
+                # Tentativa simples de pluralização
+                if base_name.endswith('s'):
+                    attr_name = base_name + "es"
+                elif base_name.endswith('y'):
+                    attr_name = base_name[:-1] + "ies"
+                else:
+                    attr_name = base_name + "s"
+            else:
+                attr_name = base_name
+            
+            # Garantir unicidade
+            original_attr_name = attr_name
+            counter = 1
+            while attr_name in used_names:
+                counter += 1
+                attr_name = f"{original_attr_name}_{counter}"
+            used_names.add(attr_name)
+            
+            tipo_destino = dest_class
+            py_type_hint, _, _ = self.type_mapper.get_python_type_hint_and_imports(tipo_destino, self.current_file_module_dot_path)
+            if is_multiple:
+                py_type_hint = f"List[{py_type_hint}]"
+            param_str = f"{attr_name}: Optional[{py_type_hint}] = None"
+            relationship_attributes.append(param_str)
+        if not instance_attributes and not self.classe.classe_pai and not relationship_attributes:
             return []
 
         required_params = []
         optional_params = []
         init_body_lines: List[str] = []
 
-        if self.classe.classe_pai:
+        # Verifica se há herança (seja na estrutura original ou por relacionamentos)
+        has_parent = self.classe.classe_pai or self.parent_classes_from_relationships
+        
+        if has_parent:
+            # CORREÇÃO: Usar dinamicamente os argumentos necessários da classe pai
             if parent_required_args:
                 init_body_lines.append(f"super().__init__({', '.join(parent_required_args)})")
             else:
@@ -74,36 +187,91 @@ class ClassGenerator:
             param_name_py = sanitize_name_for_python_module(attr.nome)
             if param_name_py in parent_required_args:
                 continue
-                
             attr_name_in_class = param_name_py
             if attr.visibilidade == "-": attr_name_in_class = f"__{param_name_py}"
             elif attr.visibilidade == "#": attr_name_in_class = f"_{param_name_py}"
-
             py_type_hint, _s_imps, t_imps = self.type_mapper.get_python_type_hint_and_imports(
                 attr.tipo, self.current_file_module_dot_path
             )
             param_type_str = self._get_type_hint_str(py_type_hint)
-
             default_assignment_for_param = ""
             is_optional = False
             if attr.default_value is not None:
                 param_type_str = f"Optional[{self._get_type_hint_str(py_type_hint)}]"
-                default_assignment_for_param = f" = {attr.default_value}"
+                # CORREÇÃO: Verificar se o valor padrão é string e adicionar aspas se necessário
+                default_value = attr.default_value
+                # BUG 1 CORREÇÃO: Converter valores booleanos do PlantUML para Python
+                if isinstance(default_value, str) and default_value.lower() == 'true':
+                    default_assignment_for_param = " = True"
+                elif isinstance(default_value, str) and default_value.lower() == 'false':
+                    default_assignment_for_param = " = False"
+                elif isinstance(default_value, str) and not default_value.isdigit() and default_value not in ['True', 'False', 'None']:
+                    default_assignment_for_param = f' = "{default_value}"'
+                else:
+                    default_assignment_for_param = f" = {default_value}"
                 is_optional = True
             elif py_type_hint not in ["str", "int", "float", "bool", "Any", "None", "datetime.date"] and not py_type_hint.startswith("'"):
                 param_type_str = f"Optional[{self._get_type_hint_str(py_type_hint)}]"
                 default_assignment_for_param = " = None"
                 is_optional = True
-
             param_str = f"{param_name_py}: {param_type_str}{default_assignment_for_param}"
             if is_optional:
                 optional_params.append(param_str)
             else:
                 required_params.append(param_str)
-
             init_body_lines.append(f"self.{attr_name_in_class}: {self._get_type_hint_str(py_type_hint)} = {param_name_py}")
+        
+        # Adiciona inicialização dos atributos de relacionamento (usando a mesma lógica consolidada)
+        used_names = set()
+        
+        # Consolida relacionamentos únicos por classe de destino
+        consolidated_relationships = {}
+        for rel in self.relacionamentos:
+            dest_class = rel.destino
+            if dest_class not in consolidated_relationships:
+                consolidated_relationships[dest_class] = rel
+            else:
+                # Se já existe, mantém o que tem cardinalidade múltipla (*)
+                existing = consolidated_relationships[dest_class]
+                if rel.cardinalidade_destino and "*" in rel.cardinalidade_destino:
+                    consolidated_relationships[dest_class] = rel
+        
+        for dest_class, rel in consolidated_relationships.items():
+            # Usar o nome da classe de destino como base para o atributo
+            base_name = sanitize_name_for_python_module(dest_class)
+            
+            # BUG 5 CORREÇÃO: Classes de associação devem ter relacionamentos singulares
+            is_association_class = self._is_association_class()
+            is_multiple = (not is_association_class and 
+                          rel.cardinalidade_destino and 
+                          ("*" in rel.cardinalidade_destino or rel.cardinalidade_destino.strip() in ["0..*", "1..*", "n"]))
+            
+            # Para relacionamentos múltiplos, usar plural
+            if is_multiple:
+                # Tentativa simples de pluralização
+                if base_name.endswith('s'):
+                    attr_name = base_name + "es"
+                elif base_name.endswith('y'):
+                    attr_name = base_name[:-1] + "ies"
+                else:
+                    attr_name = base_name + "s"
+            else:
+                attr_name = base_name
+            
+            # Garantir unicidade
+            original_attr_name = attr_name
+            counter = 1
+            while attr_name in used_names:
+                counter += 1
+                attr_name = f"{original_attr_name}_{counter}"
+            used_names.add(attr_name)
+            
+            if is_multiple:
+                init_body_lines.append(f"self.{attr_name}: List['{dest_class}'] = [] if {attr_name} is None else {attr_name}")
+            else:
+                init_body_lines.append(f"self.{attr_name}: '{dest_class}' = {attr_name}")
 
-        init_params_list = ["self"] + parent_required_params + required_params + optional_params
+        init_params_list = ["self"] + parent_required_params + required_params + optional_params + relationship_attributes
 
         lines.append("    " * base_indent_level + f"def __init__({', '.join(init_params_list)}):")
         lines.append("    " * body_indent_level + f'"""Construtor para {to_pascal_case(self.classe.nome)}."""')
@@ -114,6 +282,31 @@ class ClassGenerator:
                 lines.append("    " * body_indent_level + line_code)
         lines.append("    " * base_indent_level + "")
         return lines
+
+    def _is_association_class(self) -> bool:
+        """BUG 5 CORREÇÃO: Determina se esta classe é uma classe de associação."""
+        # Uma classe de associação conecta exatamente 2 outras classes em relacionamentos many-to-many
+        # É identificada por ter exatamente 2 relacionamentos de saída ou pelo nome típico
+        
+        outgoing_relationships = [rel for rel in self.relacionamentos if rel.origem == self.classe.nome]
+        
+        # Classes de associação típicas por nome
+        name_suggests_association = self.classe.nome in ['Avaliacao', 'Participacao', 'Inscricao', 'Matricula', 'Associacao', 'Vinculo']
+        
+        # Se tem exatamente 2 relacionamentos de saída, é muito provável que seja classe de associação
+        has_two_outgoing = len(outgoing_relationships) == 2
+        
+        # Se o nome sugere ser de associação, forçar detecção
+        if name_suggests_association:
+            return True
+            
+        # Se tem 2 relacionamentos de saída para classes diferentes, também é classe de associação
+        if has_two_outgoing:
+            target_classes = [rel.destino for rel in outgoing_relationships]
+            if len(set(target_classes)) == 2:  # Duas classes diferentes
+                return True
+        
+        return False
 
     def _generate_method_lines(self, met: "PlantUMLMetodo") -> List[str]:
         """Gera as linhas de código para um método da classe."""
@@ -190,20 +383,17 @@ class ClassGenerator:
         return type_hint
 
     def generate_code_lines(self) -> List[str]:
-        """Gera as linhas de código para o corpo completo da classe."""
+        """Gera as linhas de código para o corpo completo da classe, incluindo atributos de relacionamento."""
         lines: List[str] = []
-        
         lines.extend(self._generate_static_attribute_lines())
+        lines.extend(self._generate_relationship_class_attributes())
         lines.extend(self._generate_init_lines())
-        
         for met in self.classe.metodos:
             lines.extend(self._generate_method_lines(met))
-            
         instance_attributes = [attr for attr in self.classe.atributos if not attr.is_static]
         if not self.classe.atributos and not self.classe.metodos and not \
-           (instance_attributes or self.classe.classe_pai):
+           (instance_attributes or self.classe.classe_pai or self.relacionamentos):
             lines.append("    pass")
         elif not lines:
             lines.append("    pass")
-
         return lines
