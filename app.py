@@ -11,7 +11,8 @@ DATA_DIAGRAMAS_DIR = os.path.join(os.path.dirname(__file__), 'data', 'diagramas'
 DATA_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'data', 'output_generated_code')
 
 class Api:
-    def convert_plantuml(self, code):
+    # Adiciona o parâmetro 'language' (padrão: python)
+    def convert_plantuml(self, code, language='python'):
         try:
             # Extrai o nome do diagrama do código PlantUML
             match = re.search(r'@startuml\s+([\w\-\d_]+)', code)
@@ -28,12 +29,13 @@ class Api:
             with open(plantuml_path, 'w', encoding='utf-8') as temp_file:
                 temp_file.write(code)
             temp_file_path = plantuml_path
-            # Chama o backend via subprocess, passando o nome do diagrama
+            # Chama o backend via subprocess, passando o nome do diagrama e a linguagem
             cmd = [
                 'python', 'back_end/main_cli.py',
                 '--input', temp_file_path,
                 '--output', DATA_OUTPUT_DIR,
-                '--diagram-name', diagram_name
+                '--diagram-name', diagram_name,
+                '--language', language  # <-- Adiciona a linguagem
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
@@ -74,7 +76,7 @@ class Api:
 if __name__ == '__main__':
     api = Api()
     window = webview.create_window(
-        "PlantUML para Python",
+        "PlantUML para Python/Java",
         url='front_end/interface.html',
         js_api=api,
         width=1200,  # largura diminuída
