@@ -1,11 +1,29 @@
 // --- Elementos da DOM ---
 const plantUmlInput = document.getElementById('plantUmlInput');
-const pythonOutput = document.getElementById('pythonOutput');
+const codeOutput = document.getElementById('codeOutput');
+const outputTitle = document.getElementById('outputTitle');
+const languageSelect = document.getElementById('languageSelect');
 const convertBtn = document.getElementById('convertBtn');
 const copyBtn = document.getElementById('copyBtn');
 const clearBtn = document.getElementById('clearBtn');
 const importBtn = document.getElementById('importBtn');
 const historyBtn = document.getElementById('historyBtn');
+
+// Atualiza o título do painel de saída baseado na linguagem selecionada
+function updateOutputTitle() {
+    const language = languageSelect.value;
+    const languageNames = {
+        'python': 'Código Python',
+        'csharp': 'Código C#'
+    };
+    outputTitle.textContent = languageNames[language] || 'Código Gerado';
+}
+
+// Event listener para mudança de linguagem
+languageSelect.addEventListener('change', updateOutputTitle);
+
+// Inicializa o título
+updateOutputTitle();
 
 // Exemplo de código PlantUML para iniciar
 // plantUmlInput.value = `@startuml
@@ -28,49 +46,50 @@ const historyBtn = document.getElementById('historyBtn');
 // Botão de Conversão (Integração com PyWebView)
 convertBtn.addEventListener('click', async () => {
     const plantUmlCode = plantUmlInput.value;
-    pythonOutput.innerHTML = '<span class="text-yellow-400">Convertendo...</span>';
+    const selectedLanguage = languageSelect.value;
+    codeOutput.innerHTML = '<span class="text-yellow-400">Convertendo...</span>';
 
     if (typeof window.pywebview === 'undefined' || !window.pywebview.api) {
-        pythonOutput.innerHTML = '<span class="text-red-500 font-semibold">Erro: A comunicação com o backend (PyWebView) não está disponível. Rode o app a partir do script Python.</span>';
+        codeOutput.innerHTML = '<span class="text-red-500 font-semibold">Erro: A comunicação com o backend (PyWebView) não está disponível. Rode o app a partir do script Python.</span>';
         return;
     }
 
     try {
-        const result = await window.pywebview.api.convert_plantuml(plantUmlCode);
+        const result = await window.pywebview.api.convert_plantuml(plantUmlCode, selectedLanguage);
         if (!result || typeof result !== 'string' || result.startsWith('Erro')) {
-            pythonOutput.innerHTML = `<span class="text-red-500 font-semibold">${result || 'Erro ao converter o diagrama.'}</span>`;
+            codeOutput.innerHTML = `<span class="text-red-500 font-semibold">${result || 'Erro ao converter o diagrama.'}</span>`;
             return;
         }
         // A resposta agora é o caminho para o diretório
         renderFileExplorer(result);
     } catch (err) {
-        pythonOutput.textContent = 'Erro ao comunicar com o backend: ' + err;
-        pythonOutput.classList.add('text-red-500');
+        codeOutput.textContent = 'Erro ao comunicar com o backend: ' + err;
+        codeOutput.classList.add('text-red-500');
     }
 });
 
 // Função para renderizar o explorador de arquivos
 async function renderFileExplorer(dirPath) {
     window._lastExplorerDir = dirPath; // Salva o último diretório para o botão "voltar"
-    pythonOutput.innerHTML = '<span class="text-yellow-400">Carregando arquivos...</span>';
+    codeOutput.innerHTML = '<span class="text-yellow-400">Carregando arquivos...</span>';
     try {
         let entries = await window.pywebview.api.list_dir(dirPath);
-        pythonOutput.innerHTML = '';
+        codeOutput.innerHTML = '';
         // DEBUG: Mostra o caminho do diretório atual no topo do explorador
         const dirInfo = document.createElement('div');
         dirInfo.className = 'text-xs text-gray-400 mb-2 select-all';
         dirInfo.textContent = `Diretório: ${dirPath}`;
-        pythonOutput.appendChild(dirInfo);
+        codeOutput.appendChild(dirInfo);
         if (!entries || entries.length === 0 || (entries.every(e => e.error))) {
-            pythonOutput.innerHTML += '<span class="text-red-400">Nenhum código Python gerado para este diagrama.</span>';
+            codeOutput.innerHTML += '<span class="text-red-400">Nenhum código gerado para este diagrama.</span>';
             return;
         }
         const explorer = document.createElement('div');
         explorer.className = 'file-explorer';
         buildExplorerTree(explorer, entries);
-        pythonOutput.appendChild(explorer);
+        codeOutput.appendChild(explorer);
     } catch (e) {
-        pythonOutput.innerHTML = `<span class="text-red-500">Erro ao listar diretório: ${e}</span>`;
+        codeOutput.innerHTML = `<span class="text-red-500">Erro ao listar diretório: ${e}</span>`;
     }
 }
 
@@ -115,7 +134,7 @@ function buildExplorerTree(container, entries) {
 
 // Função para exibir o conteúdo do arquivo
 function showFileContent(filename, content) {
-    pythonOutput.innerHTML = '';
+    codeOutput.innerHTML = '';
     const wrapper = document.createElement('div');
     wrapper.className = 'relative h-full flex flex-col';
 
@@ -143,24 +162,33 @@ function showFileContent(filename, content) {
     const pre = document.createElement('pre');
     pre.className = 'flex-grow bg-gray-900 p-3 overflow-auto text-sm';
     const code = document.createElement('code');
-    code.className = 'language-python';
+    
+    // Determina a linguagem de syntax highlighting baseada na extensão do arquivo
+    if (filename.endsWith('.py')) {
+        code.className = 'language-python';
+    } else if (filename.endsWith('.cs')) {
+        code.className = 'language-csharp';
+    } else {
+        code.className = 'language-text';
+    }
+    
     code.textContent = content;
     pre.appendChild(code);
     wrapper.appendChild(pre);
 
-    pythonOutput.appendChild(wrapper);
+    codeOutput.appendChild(wrapper);
 }
 
 // Botão de Limpar
 clearBtn.addEventListener('click', () => {
     plantUmlInput.value = '';
-    pythonOutput.innerHTML = '<code id="pythonOutput" class="language-python text-sm font-mono text-gray-300"># O código Python gerado aparecerá aqui...</code>';
+    codeOutput.innerHTML = '<code id="codeOutput" class="text-sm font-mono text-gray-300"># O código gerado aparecerá aqui...</code>';
     plantUmlInput.focus();
 });
 
 // Botão de Copiar (Copia o conteúdo visível na área de saída)
 copyBtn.addEventListener('click', () => {
-    const codeToCopy = pythonOutput.textContent;
+    const codeToCopy = codeOutput.textContent;
     const textArea = document.createElement('textarea');
     textArea.value = codeToCopy;
     document.body.appendChild(textArea);
@@ -199,21 +227,21 @@ importBtn.addEventListener('click', () => {
 // Botão de Histórico: mostra o conteúdo de output_generated_code
 historyBtn.addEventListener('click', async () => {
     if (typeof window.pywebview === 'undefined' || !window.pywebview.api) {
-        pythonOutput.innerHTML = '<span class="text-red-500 font-semibold">Erro: A comunicação com o backend (PyWebView) não está disponível. Rode o app a partir do script Python.</span>';
+        codeOutput.innerHTML = '<span class="text-red-500 font-semibold">Erro: A comunicação com o backend (PyWebView) não está disponível. Rode o app a partir do script Python.</span>';
         return;
     }
-    pythonOutput.innerHTML = '<span class="text-yellow-400">Carregando histórico...</span>';
+    codeOutput.innerHTML = '<span class="text-yellow-400">Carregando histórico...</span>';
     try {
         // Caminho relativo ao backend
         let result = await window.pywebview.api.list_dir('data/output_generated_code');
         // Ordena alfabeticamente e numericamente
         result = result.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-        pythonOutput.innerHTML = '';
+        codeOutput.innerHTML = '';
         const explorer = document.createElement('div');
         explorer.className = 'file-explorer';
         buildExplorerTree(explorer, result);
-        pythonOutput.appendChild(explorer);
+        codeOutput.appendChild(explorer);
     } catch (e) {
-        pythonOutput.innerHTML = `<span class="text-red-500">Erro ao acessar histórico: ${e}</span>`;
+        codeOutput.innerHTML = `<span class="text-red-500">Erro ao acessar histórico: ${e}</span>`;
     }
 });
