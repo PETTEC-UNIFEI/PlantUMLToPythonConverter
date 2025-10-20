@@ -14,7 +14,8 @@ function updateOutputTitle() {
     const language = languageSelect.value;
     const languageNames = {
         'python': 'Código Python',
-        'csharp': 'Código C#'
+        'csharp': 'Código C#',
+        'java': 'Código Java'
     };
     outputTitle.textContent = languageNames[language] || 'Código Gerado';
 }
@@ -49,6 +50,9 @@ convertBtn.addEventListener('click', async () => {
     const selectedLanguage = languageSelect.value;
     codeOutput.innerHTML = '<span class="text-yellow-400">Convertendo...</span>';
 
+    // Adicione aqui o início da medição
+    const startTime = performance.now();
+
     if (typeof window.pywebview === 'undefined' || !window.pywebview.api) {
         codeOutput.innerHTML = '<span class="text-red-500 font-semibold">Erro: A comunicação com o backend (PyWebView) não está disponível. Rode o app a partir do script Python.</span>';
         return;
@@ -56,11 +60,18 @@ convertBtn.addEventListener('click', async () => {
 
     try {
         const result = await window.pywebview.api.convert_plantuml(plantUmlCode, selectedLanguage);
+
+        // Medição do tempo: finalize aqui
+        const endTime = performance.now();
+        const execTime = ((endTime - startTime) / 1000).toFixed(2);
+
+        // Exiba o tempo na tela
+        document.getElementById('conversionTime').innerText = `Tempo de execução: ${execTime} segundos`;
+
         if (!result || typeof result !== 'string' || result.startsWith('Erro')) {
             codeOutput.innerHTML = `<span class="text-red-500 font-semibold">${result || 'Erro ao converter o diagrama.'}</span>`;
             return;
         }
-        // A resposta agora é o caminho para o diretório
         renderFileExplorer(result);
     } catch (err) {
         codeOutput.textContent = 'Erro ao comunicar com o backend: ' + err;
@@ -168,6 +179,8 @@ function showFileContent(filename, content) {
         code.className = 'language-python';
     } else if (filename.endsWith('.cs')) {
         code.className = 'language-csharp';
+    } else if (filename.endsWith('.java')) {
+        code.className = 'language-java';
     } else {
         code.className = 'language-text';
     }

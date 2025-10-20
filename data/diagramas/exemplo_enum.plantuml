@@ -1,0 +1,15 @@
+@startuml exemplo_enum
+enum Status {
+  ATIVO
+  INATIVO
+  PENDENTE
+  SUSPENSO
+  CANCELADO
+}
+enum TipoPagamento {
+  DINHEIRO
+  CARTAO
+  PIX
+  BOLETO
+}
+@enduml

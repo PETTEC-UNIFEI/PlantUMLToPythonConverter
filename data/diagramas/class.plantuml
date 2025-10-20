@@ -1,0 +1,8 @@
+@startuml
+class Carro {
+    - string modelo
+    - int ano
+    + void Ligar()
+    + void Desligar()
+}
+@enduml

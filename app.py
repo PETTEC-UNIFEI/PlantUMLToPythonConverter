@@ -12,6 +12,7 @@ DATA_DIAGRAMAS_DIR = os.path.join(os.path.dirname(__file__), 'data', 'diagramas'
 DATA_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'data', 'output_generated_code')
 
 class Api:
+    # Adiciona o parâmetro 'language' (padrão: python)
     def convert_plantuml(self, code, language='python'):
         try:
             # Extrai o nome do diagrama do código PlantUML
@@ -30,8 +31,6 @@ class Api:
                 temp_file.write(code)
             temp_file_path = plantuml_path
             # Chama o backend via subprocess, passando o nome do diagrama e a linguagem
-            # Usa o mesmo executável Python que está executando esta aplicação
-            # Tenta primeiro como módulo, depois como script direto
             cmd = [
                 sys.executable, '-m', 'back_end.main_cli',
                 '--input', temp_file_path,
