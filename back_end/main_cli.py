@@ -1,8 +1,8 @@
 """
-CLI para rodar o backend do conversor PlantUML para Python e java.
+CLI para rodar o backend do conversor PlantUML para Python, C# e java.
 
 Uso:
-    python back_end/main_cli.py [--input caminho/arquivo.puml] [--output pasta_saida] [--language python|java]
+    python back_end/main_cli.py [--input caminho/arquivo.puml] [--output pasta_saida] [--language python|java|csharp]
     
     Se não for especificado um arquivo de entrada, será usado o exemplo_diagrama.plantuml
     da pasta data/diagramas.
@@ -43,6 +43,7 @@ sys.path.insert(0, project_root)
 try:
     from back_end.plantuml_parser.parser import PlantUMLParser
     from back_end.python_generator.main_generator import MainCodeGenerator as PythonGenerator
+    from back_end.csharp_generator.main_generator import MainCodeGenerator as CSharpGenerator
     from back_end.java_generator.main_generator import MainCodeGenerator as JavaGenerator
 except ImportError as e:
     print(f"Erro ao importar módulos: {e}")
@@ -52,14 +53,14 @@ except ImportError as e:
 def main():
     # Parser de argumentos com mensagens de ajuda
     parser = argparse.ArgumentParser(
-        description="Conversor PlantUML para Python e C#",
+        description="Conversor PlantUML para Python, Java e C#",
         epilog="Se não for especificado um arquivo de entrada, será usado o exemplo_diagrama.plantuml"
     )
     parser.add_argument('--input', '-i', help='Arquivo PlantUML de entrada')
     parser.add_argument('--output', '-o', default='output_generated_code', help='Diretório de saída')
     parser.add_argument('--diagram-name', default=None, help='Nome do diagrama para a pasta de saída')
-    parser.add_argument('--language', '-l', choices=['python', 'java'], default='python', 
-                       help='Linguagem de destino (python ou java). Padrão: python')
+    parser.add_argument('--language', '-l', choices=['python', 'csharp', 'java'], default='python', 
+                       help='Linguagem de destino (python, csharp ou java). Padrão: python')
     parser.add_argument('--namespace', '-n', default='GeneratedCode', 
                        help='Namespace base para C# (ignorado para Python). Padrão: GeneratedCode')
     args = parser.parse_args()
@@ -93,15 +94,21 @@ def main():
     try:
         with open(args.input, 'r', encoding='utf-8') as f:
             plantuml_code = f.read()
-        print(f"Convertendo {args.input} para {args.language.upper()}...")
+        print(f"Convertendo {args.input} para {args.language.upper()} para {args.language.upper()}...")
         
         # Processamento do diagrama
         parser_backend = PlantUMLParser()
         diagrama = parser_backend.parse(plantuml_code)
-        
         # Escolhe o gerador baseado na linguagem
         if args.language == 'python':
             generator = PythonGenerator(diagrama, args.output, diagram_name=args.diagram_name)
+        elif args.language == 'csharp':
+            generator = CSharpGenerator(
+                parsed_diagram=diagrama, 
+                output_base_dir=args.output, 
+                diagram_name=args.diagram_name,
+                base_namespace=args.namespace
+            )
         elif args.language == 'java':
             generator = JavaGenerator(
                 parsed_diagram=diagrama, 
