@@ -1,0 +1,11 @@
+@startuml exemplo_interface
+interface IBackup {
+  +realizar_backup(): bool
+  +agendar_backup(data: Date): void
+  +cancelar_backup(id: int): bool
+}
+interface IAutenticavel {
+  +autenticar(usuario: str, senha: str): bool
+  +logout(): void
+}
+@enduml

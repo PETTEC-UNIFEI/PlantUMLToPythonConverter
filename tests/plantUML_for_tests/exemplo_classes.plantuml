@@ -1,0 +1,37 @@
+@startuml exemplo_classes
+class Usuario {
+  +id: int
+  +nome: str
+  #email: str
+  #data_nascimento: Date
+  -ativo: bool
+  -saldo: float
+  +tags: List
+  +login(): bool
+  #get_id(): int
+  +get_nome(): str
+  -get_idade(): int
+  +get_tags(): List
+  #atualizar_email(novo_email: str): bool
+  -desativar(): void
+}
+class Produto {
+  +codigo: int
+  #descricao: str
+  -preco: float
+  +disponivel: bool
+  #fabricante: str
+  +get_preco(): float
+  #set_preco(valor: float): void
+  -is_disponivel(): bool
+}
+class Pedido {
+  +numero: int
+  #data: Date
+  -valor_total: float
+  +itens: List
+  +get_valor_total(): float
+  #adicionar_item(item: Produto): void
+  -remover_item(item: Produto): bool
+}
+@enduml
